@@ -16,6 +16,8 @@ pub struct KothonOptions {
     pub english_words_in_english: bool,
     pub punctuation: bool,
     pub no_timestamps: bool,
+    /// Run on the CPU (iOS apps in the background can't use the GPU).
+    pub cpu_only: bool,
 }
 
 impl From<&KothonOptions> for Options {
@@ -30,6 +32,7 @@ impl From<&KothonOptions> for Options {
             english_words_in_english: o.english_words_in_english,
             punctuation: o.punctuation,
             no_timestamps: o.no_timestamps,
+            cpu_only: o.cpu_only,
         }
     }
 }
@@ -58,13 +61,14 @@ unsafe fn path_arg<'a>(p: *const c_char) -> Option<&'a Path> {
 pub unsafe extern "C" fn kothon_engine_new(
     model_path: *const c_char,
     punct_dir: *const c_char,
+    cpu_only: bool,
     err_out: *mut *mut c_char,
 ) -> *mut Engine {
     let Some(model) = path_arg(model_path) else {
         set_err(err_out, "model path is missing or not UTF-8".into());
         return ptr::null_mut();
     };
-    match std::panic::catch_unwind(|| Engine::load(model, path_arg(punct_dir))) {
+    match std::panic::catch_unwind(|| Engine::load(model, path_arg(punct_dir), cpu_only)) {
         Ok(Ok(engine)) => Box::into_raw(Box::new(engine)),
         Ok(Err(e)) => {
             set_err(err_out, format!("{e:#}"));
@@ -132,6 +136,14 @@ pub unsafe extern "C" fn kothon_post_process(
         Options::from(&*options)
     };
     to_c(crate::post_process_text(&text, &opts))
+}
+
+/// Free the GPU (`cpu` = false) or CPU copy of the model. It reloads on demand.
+#[no_mangle]
+pub unsafe extern "C" fn kothon_engine_unload(engine: *const Engine, cpu: bool) {
+    if !engine.is_null() {
+        (*engine).unload(cpu);
+    }
 }
 
 #[no_mangle]

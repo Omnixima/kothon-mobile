@@ -44,6 +44,13 @@ final class DictationService: ObservableObject {
         DarwinCenter.shared.observe(.start) { [weak self] in self?.startRecording() }
         DarwinCenter.shared.observe(.stop) { [weak self] in self?.stopRecording() }
         DarwinCenter.shared.observe(.cancel) { [weak self] in self?.cancelRecording() }
+        // Background apps can't use the GPU: swap to the CPU copy of the
+        // model as the app leaves the screen, while a session keeps it alive.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.prepareForBackground() }
+        }
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in
@@ -138,7 +145,8 @@ final class DictationService: ObservableObject {
         let samples = buffer.stop()
         lastDuration = Double(samples.count) / sampleRate
         setPhase(.transcribing)
-        let settings = DictationSettings.current
+        var settings = DictationSettings.current
+        settings.cpuOnly = UIApplication.shared.applicationState != .active
         let modelID = ModelStore.shared.selectedID
 
         Task {
@@ -170,7 +178,8 @@ final class DictationService: ObservableObject {
         DarwinCenter.shared.post(.changed)
     }
 
-    private func fail(_ message: String) {
+    private func fail(_ detail: String) {
+        let message = detail.hasPrefix("আগে") ? detail : "লিখতে পারিনি (\(detail))"
         lastError = message
         shared.set(message, forKey: SharedKey.errorText)
         if phase == .recording || phase == .transcribing { setPhase(audioEngine.isRunning ? .ready : .off) }
@@ -200,14 +209,20 @@ final class DictationService: ObservableObject {
         }
         let modelURL = store.file(for: model)
         let punct = store.punctuationInstalled ? store.punctuationDir : nil
+        let cpuOnly = UIApplication.shared.applicationState != .active
         let loaded = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<OnDeviceEngine, Error>) in
             engineQueue.async {
-                cont.resume(with: Result { try OnDeviceEngine(model: model, modelURL: modelURL, punctuationDir: punct) })
+                cont.resume(with: Result { try OnDeviceEngine(model: model, modelURL: modelURL, punctuationDir: punct, cpuOnly: cpuOnly) })
             }
         }
         engine = loaded
         engineModelID = modelID
         return loaded
+    }
+
+    private func prepareForBackground() {
+        guard phase != .off, let engine else { return }
+        engineQueue.async { engine.prepareForBackground() }
     }
 
     /// Drop the loaded model, e.g. after switching models or on a memory warning.

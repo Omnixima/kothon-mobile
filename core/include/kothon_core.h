@@ -18,10 +18,13 @@ typedef struct {
     bool english_words_in_english;// "meeting-এ" instead of "মিটিংয়ে"
     bool punctuation;             // । , ? from the MuRIL model, if loaded
     bool no_timestamps;           // true for the Whisper fine-tune
+    bool cpu_only;                // iOS: true while the app is in the background (no GPU there)
 } KothonOptions;
 
-// Load a GGUF model. punct_dir may be NULL. NULL on failure, with *err_out set.
-KothonEngine *kothon_engine_new(const char *model_path, const char *punct_dir, char **err_out);
+// Load a GGUF model, on the CPU or GPU (the other copy loads on demand).
+// punct_dir may be NULL. NULL on failure, with *err_out set.
+KothonEngine *kothon_engine_new(const char *model_path, const char *punct_dir, bool cpu_only,
+                                char **err_out);
 
 // 16 kHz mono float samples in, UTF-8 text out. NULL on failure, with *err_out set.
 char *kothon_transcribe(const KothonEngine *engine, const float *pcm, size_t n_samples,
@@ -29,6 +32,9 @@ char *kothon_transcribe(const KothonEngine *engine, const float *pcm, size_t n_s
 
 // Rule-based cleanup only (numbers, fillers, English words).
 char *kothon_post_process(const char *text, const KothonOptions *options);
+
+// Free the GPU (cpu = false) or CPU copy of the model; it reloads when next needed.
+void kothon_engine_unload(const KothonEngine *engine, bool cpu);
 
 void kothon_engine_free(KothonEngine *engine);
 void kothon_string_free(char *s);

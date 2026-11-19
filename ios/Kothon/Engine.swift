@@ -7,6 +7,15 @@ import KothonCore
 /// an optional online engine could slot in here later.
 protocol Transcriber: AnyObject {
     func transcribe(_ samples: [Float], settings: DictationSettings) throws -> String
+    /// Getting ready to run in the background: free what can't be used there.
+    func prepareForBackground()
+}
+
+extension OnDeviceEngine {
+    func prepareForBackground() {
+        unload(cpu: false)
+        warmCPU()
+    }
 }
 
 struct DictationSettings {
@@ -15,6 +24,9 @@ struct DictationSettings {
     var removeFillers = true
     var englishWordsInEnglish = false
     var punctuation = true
+    /// iOS doesn't let background apps use the GPU, so dictations from the
+    /// keyboard (app in the background) run on the CPU.
+    var cpuOnly = false
 
     static var current: DictationSettings {
         let d = KothonShared.defaults
@@ -38,13 +50,13 @@ final class OnDeviceEngine: Transcriber {
     private let handle: OpaquePointer
     let model: SpeechModel
 
-    init(model: SpeechModel, modelURL: URL, punctuationDir: URL?) throws {
+    init(model: SpeechModel, modelURL: URL, punctuationDir: URL?, cpuOnly: Bool) throws {
         var err: UnsafeMutablePointer<CChar>?
         let h = modelURL.path.withCString { modelPath in
             if let punctuationDir {
-                return punctuationDir.path.withCString { kothon_engine_new(modelPath, $0, &err) }
+                return punctuationDir.path.withCString { kothon_engine_new(modelPath, $0, cpuOnly, &err) }
             }
-            return kothon_engine_new(modelPath, nil, &err)
+            return kothon_engine_new(modelPath, nil, cpuOnly, &err)
         }
         guard let h else {
             throw EngineError(message: Self.take(err) ?? "Couldn't load the model")
@@ -61,7 +73,8 @@ final class OnDeviceEngine: Transcriber {
             remove_fillers: settings.removeFillers,
             english_words_in_english: settings.englishWordsInEnglish,
             punctuation: settings.punctuation,
-            no_timestamps: model.noTimestamps)
+            no_timestamps: model.noTimestamps,
+            cpu_only: settings.cpuOnly)
         var err: UnsafeMutablePointer<CChar>?
         let out = samples.withUnsafeBufferPointer { buf in
             kothon_transcribe(handle, buf.baseAddress, buf.count, &options, &err)
@@ -70,6 +83,17 @@ final class OnDeviceEngine: Transcriber {
             throw EngineError(message: Self.take(err) ?? "Transcription failed")
         }
         return text
+    }
+
+    /// Free the GPU or CPU copy of the model; it reloads when next needed.
+    func unload(cpu: Bool) { kothon_engine_unload(handle, cpu) }
+
+    /// Load the CPU copy now (by running a moment of silence), so the first
+    /// dictation from the keyboard doesn't wait for it.
+    func warmCPU() {
+        var settings = DictationSettings()
+        settings.cpuOnly = true
+        _ = try? transcribe([Float](repeating: 0, count: 8_000), settings: settings)
     }
 
     /// Copy a Rust-owned string into Swift and free it.
