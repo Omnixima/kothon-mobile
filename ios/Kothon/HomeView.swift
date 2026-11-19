@@ -361,6 +361,25 @@ private struct HomeSheetView: View {
                         KeyboardSetupView(showIntro: $showIntro, developerMode: $developerMode)
                     case .style:
                         SettingsCard()
+                        NavigationLink { CustomWordsView() } label: {
+                            HStack(spacing: 14) {
+                                Image(systemName: "character.book.closed").font(.system(size: 17))
+                                    .foregroundStyle(Brand.lilac).frame(width: 22)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("আমার শব্দ").font(.bn(.body, .semibold))
+                                    Text("নাম আর ইংরেজি শব্দ ঠিকঠাক লিখতে").font(.bn(.caption))
+                                        .foregroundStyle(.white.opacity(0.6))
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.35))
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 60)
+                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(16)
@@ -544,6 +563,8 @@ struct EngineStatusRow: View {
 struct BenchmarkCard: View {
     @EnvironmentObject var dictation: DictationService
     @State private var lastStats = ""
+    /// The last recording as a WAV, written when it changes, not per redraw.
+    @State private var recordingURL: URL?
 
     var body: some View {
         Group {
@@ -561,11 +582,22 @@ struct BenchmarkCard: View {
                 if !dictation.benchmarkResult.isEmpty {
                     Text(dictation.benchmarkResult).font(.bn(.caption)).textSelection(.enabled)
                 }
+                // Share the last recording (AirDrop, Files) for testing models.
+                if let url = recordingURL {
+                    ShareLink(item: url) {
+                        Label("শেষ রেকর্ডিং সেভ করুন", systemImage: "square.and.arrow.up")
+                            .font(.bn(.subheadline, .medium))
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
         }
-        .onAppear { lastStats = KothonShared.defaults.string(forKey: SharedKey.stats) ?? "" }
-            .onChange(of: dictation.lastStats) { _, new in lastStats = new }
+        .onAppear {
+            lastStats = KothonShared.defaults.string(forKey: SharedKey.stats) ?? ""
+            recordingURL = dictation.exportLastRecording()
+        }
+            .onChange(of: dictation.lastStats) { _, new in lastStats = new; recordingURL = dictation.exportLastRecording() }
     }
 }
 

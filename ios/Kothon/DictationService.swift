@@ -182,7 +182,8 @@ final class DictationService: ObservableObject {
                     if phase == .transcribing { setPhase(.ready) }
                     return
                 }
-                let text = try await run(engine, speech, settings)
+                // Replacements from "আমার শব্দ", on whole words.
+                let text = CustomWords.apply(try await run(engine, speech, settings))
                 guard generation == runGeneration else { return }  // cancelled
                 lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(runStart),
                                        load: loadTime, chip: engine is NeuralEngineEngine ? "Neural Engine" : settings.cpuOnly ? "CPU" : "GPU")
@@ -193,6 +194,25 @@ final class DictationService: ObservableObject {
             }
             if phase == .transcribing { setPhase(.ready) }
         }
+    }
+
+    /// Developer mode: the last recording as a 16 kHz mono WAV in the temp
+    /// folder, to share for testing. Nil if nothing was recorded yet.
+    func exportLastRecording() -> URL? {
+        guard !lastSamples.isEmpty else { return nil }
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("kothon-\(stamp).wav")
+        var pcm = Data(capacity: lastSamples.count * 2)
+        for s in lastSamples {
+            var v = Int16(max(-1, min(1, s)) * Float(Int16.max)).littleEndian
+            withUnsafeBytes(of: &v) { pcm.append(contentsOf: $0) }
+        }
+        func le32(_ x: UInt32) -> Data { withUnsafeBytes(of: x.littleEndian) { Data($0) } }
+        func le16(_ x: UInt16) -> Data { withUnsafeBytes(of: x.littleEndian) { Data($0) } }
+        var wav = Data("RIFF".utf8) + le32(UInt32(36 + pcm.count)) + Data("WAVE".utf8)
+        wav += Data("fmt ".utf8) + le32(16) + le16(1) + le16(1) + le32(16_000) + le32(32_000) + le16(2) + le16(16)
+        wav += Data("data".utf8) + le32(UInt32(pcm.count)) + pcm
+        do { try wav.write(to: url); return url } catch { return nil }
     }
 
     /// Each dictation's number, so a cancelled one's result is dropped.
