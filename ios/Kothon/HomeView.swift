@@ -83,6 +83,7 @@ struct HomeView: View {
 
 struct ModelCard: View {
     @EnvironmentObject var models: ModelStore
+    @EnvironmentObject var dictation: DictationService
 
     var body: some View {
         GlassCard {
@@ -102,6 +103,14 @@ struct ModelCard: View {
                 Spacer()
                 if models.punctuationInstalled {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Button {
+                        confirmDeletePunctuation = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .accessibilityLabel("যতিচিহ্ন মডেল মুছুন")
                 } else if let p = models.progress[PunctuationModel.dirName] {
                     ProgressView(value: p).frame(width: 80)
                 } else {
@@ -113,7 +122,17 @@ struct ModelCard: View {
                 Text(err).font(.caption).foregroundStyle(.red)
             }
         }
+        .confirmationDialog("যতিচিহ্ন মডেল মুছবেন?", isPresented: $confirmDeletePunctuation, titleVisibility: .visible) {
+            Button("মুছুন", role: .destructive) {
+                models.deletePunctuation()
+                dictation.modelChanged()
+            }
+        } message: {
+            Text("তখন লেখায় । , ? বসবে না। পরে আবার নামাতে পারবেন।")
+        }
     }
+
+    @State private var confirmDeletePunctuation = false
 }
 
 struct ModelRow: View {
@@ -136,7 +155,19 @@ struct ModelRow: View {
             }
             Spacer()
             if models.isInstalled(model) {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                if models.selectedID == model.id {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                } else {
+                    // Only models not in use can be deleted.
+                    Button {
+                        confirmDelete = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.red)
+                    .accessibilityLabel("\(model.label) মুছুন")
+                }
             } else if let p = models.progress[model.id] {
                 ProgressView(value: p).frame(width: 80)
             } else {
@@ -144,7 +175,14 @@ struct ModelRow: View {
                     .buttonStyle(.borderedProminent)
             }
         }
+        .confirmationDialog("\(model.label) মুছবেন?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("মুছুন", role: .destructive) { models.delete(model) }
+        } message: {
+            Text("ফোনে জায়গা খালি হবে। পরে দরকার হলে আবার নামাতে পারবেন।")
+        }
     }
+
+    @State private var confirmDelete = false
 }
 
 /// Whether the selected model is in memory and ready to write.

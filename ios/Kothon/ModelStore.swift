@@ -148,8 +148,28 @@ final class ModelStore: ObservableObject {
         await fetch(id: PunctuationModel.dirName, items: items)
     }
 
+    /// Remove a downloaded model to free space. It can be downloaded again.
     func delete(_ model: SpeechModel) {
-        try? FileManager.default.removeItem(at: file(for: model))
+        let fm = FileManager.default
+        if let variant = model.coreML?.variant {
+            // The copy WhisperKit downloaded, and a test copy in Documents.
+            if let path = UserDefaults.standard.string(forKey: "coreml.\(model.id)") {
+                try? fm.removeItem(atPath: path)
+                UserDefaults.standard.removeObject(forKey: "coreml.\(model.id)")
+            }
+            let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            try? fm.removeItem(at: docs.appendingPathComponent(variant, isDirectory: true))
+        } else {
+            try? fm.removeItem(at: file(for: model))
+        }
+        if selectedID == model.id {
+            selectedID = SpeechModel.all.first { $0.id != model.id && isInstalled($0) }?.id ?? SpeechModel.fast.id
+        }
+        objectWillChange.send()
+    }
+
+    func deletePunctuation() {
+        try? FileManager.default.removeItem(at: punctuationDir)
         objectWillChange.send()
     }
 
