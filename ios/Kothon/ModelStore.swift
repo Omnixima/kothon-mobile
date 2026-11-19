@@ -11,6 +11,13 @@ struct SpeechModel: Identifiable, Equatable {
     let filename: String
     let sizeMB: Int
     let noTimestamps: Bool
+    /// Core ML (WhisperKit) model folder on Hugging Face, for the Neural
+    /// Engine. `nil` for GGUF models run by kothon-core.
+    var coreML: (repo: String, variant: String)? = nil
+
+    var isCoreML: Bool { coreML != nil }
+
+    static func == (a: SpeechModel, b: SpeechModel) -> Bool { a.id == b.id }
 
     var url: URL { URL(string: "https://huggingface.co/\(repo)/resolve/main/\(filename)")! }
 
@@ -27,7 +34,16 @@ struct SpeechModel: Identifiable, Equatable {
         repo: "omnixima/bengaliai-whisper-medium-gguf",
         filename: "bengali-whisper-medium-Q8_0.gguf", sizeMB: 793, noTimestamps: true)
 
-    static let all = [fast, accurate]
+    /// Test only: OpenAI Whisper small as Core ML, to measure the Neural
+    /// Engine from the keyboard (in the background) before converting নিখুঁত.
+    /// Its Bengali is poor; only the timing matters.
+    static let neuralEngineTest = SpeechModel(
+        id: "ane-test-whisper-small", label: "পরীক্ষা: Neural Engine",
+        detail: "Whisper small (Core ML) · ~৪৮০ MB · শুধু গতি মাপার জন্য, বাংলা ভালো হবে না",
+        repo: "argmaxinc/whisperkit-coreml", filename: "", sizeMB: 480, noTimestamps: true,
+        coreML: (repo: "argmaxinc/whisperkit-coreml", variant: "openai_whisper-small"))
+
+    static let all = [fast, accurate, neuralEngineTest]
 }
 
 /// The punctuation model's files (desktop: src-tauri/src/kothon_punct.rs).
@@ -67,7 +83,15 @@ final class ModelStore: ObservableObject {
 
     func file(for model: SpeechModel) -> URL { dir.appendingPathComponent(model.filename) }
     func isInstalled(_ model: SpeechModel) -> Bool {
-        FileManager.default.fileExists(atPath: file(for: model).path)
+        if model.isCoreML { return coreMLFolder(for: model) != nil }
+        return FileManager.default.fileExists(atPath: file(for: model).path)
+    }
+
+    /// Where WhisperKit put a Core ML model, once downloaded.
+    func coreMLFolder(for model: SpeechModel) -> URL? {
+        guard let path = UserDefaults.standard.string(forKey: "coreml.\(model.id)"),
+              FileManager.default.fileExists(atPath: path) else { return nil }
+        return URL(fileURLWithPath: path)
     }
 
     var punctuationDir: URL { dir.appendingPathComponent(PunctuationModel.dirName, isDirectory: true) }
@@ -78,6 +102,23 @@ final class ModelStore: ObservableObject {
     func isDownloading(_ id: String) -> Bool { progress[id] != nil }
 
     func download(_ model: SpeechModel) async {
+        if let coreML = model.coreML {
+            guard progress[model.id] == nil else { return }
+            progress[model.id] = 0
+            lastError = nil
+            defer { progress[model.id] = nil }
+            do {
+                let folder = try await NeuralEngineModels.download(
+                    repo: coreML.repo, variant: coreML.variant, into: dir
+                ) { [weak self] fraction in
+                    Task { @MainActor in self?.progress[model.id] = fraction }
+                }
+                UserDefaults.standard.set(folder.path, forKey: "coreml.\(model.id)")
+            } catch {
+                lastError = error.localizedDescription
+            }
+            return
+        }
         await fetch(id: model.id, items: [(model.url, file(for: model))])
     }
 

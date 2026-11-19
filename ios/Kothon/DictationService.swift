@@ -165,7 +165,7 @@ final class DictationService: ObservableObject {
                 let runStart = Date()
                 let text = try await run(engine, samples, settings)
                 lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(runStart),
-                                       load: loadTime, cpu: settings.cpuOnly)
+                                       load: loadTime, chip: engine is NeuralEngineEngine ? "Neural Engine" : settings.cpuOnly ? "CPU" : "GPU")
                 deliver(text)
             } catch {
                 fail(error.localizedDescription)
@@ -202,6 +202,11 @@ final class DictationService: ObservableObject {
                 return best
             }
             var settings = DictationSettings.current
+            if engine is NeuralEngineEngine {
+                results.append("Neural Engine \(Self.bn(try await time(settings, runs: 3)))")
+                benchmarkResult = "\(ModelStore.shared.selected.label), \(Self.bn(lastDuration)) সে. কথা → সময় (সে.): " + results.joined(separator: " · ")
+                return
+            }
             settings.cpuOnly = false
             results.append("GPU \(Self.bn(try await time(settings, runs: 2)))")
 
@@ -258,8 +263,8 @@ final class DictationService: ObservableObject {
         }.joined()
     }
 
-    private static func stats(audio: TimeInterval, took: TimeInterval, load: TimeInterval, cpu: Bool) -> String {
-        var s = "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা (\(cpu ? "CPU" : "GPU"))"
+    private static func stats(audio: TimeInterval, took: TimeInterval, load: TimeInterval, chip: String) -> String {
+        var s = "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা (\(chip))"
         if load > 0.2 { s += ", মডেল লোড \(bn(load)) সে." }
         return s
     }
@@ -312,6 +317,16 @@ final class DictationService: ObservableObject {
         let store = ModelStore.shared
         guard let model = SpeechModel.all.first(where: { $0.id == modelID }), store.isInstalled(model) else {
             throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
+        }
+        if model.isCoreML {
+            guard let folder = store.coreMLFolder(for: model) else {
+                throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
+            }
+            let loaded = try await NeuralEngineEngine(model: model, folder: folder)
+            _ = try? await run(loaded, [Float](repeating: 0, count: 16_000), DictationSettings())
+            engine = loaded
+            engineModelID = modelID
+            return loaded
         }
         let modelURL = store.file(for: model)
         let punct = store.punctuationInstalled ? store.punctuationDir : nil

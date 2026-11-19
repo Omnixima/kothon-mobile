@@ -16,6 +16,11 @@ settings:
     TARGETED_DEVICE_FAMILY: "1"
     # kothon-core ships an arm64 simulator slice only (Apple Silicon Macs).
     EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
+packages:
+  # Whisper on the Neural Engine through Core ML (MIT). Test for now.
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit
+    from: 0.9.0
 targets:
   Kothon:
     type: application
@@ -26,6 +31,7 @@ targets:
     dependencies:
       - framework: Frameworks/KothonCore.xcframework
         embed: false
+      - package: WhisperKit
       - sdk: Metal.framework
       - sdk: MetalKit.framework
       - sdk: Accelerate.framework
