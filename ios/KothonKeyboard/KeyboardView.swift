@@ -107,13 +107,15 @@ struct KeyboardView: View {
                 talkPanel
             } else {
                 DictatePill(phase: model.phase, enabled: model.hasFullAccess, status: status) { pillTapped() }
-                VStack(spacing: 0) {
-                    if layer == .emoji {
+                if layer == .emoji {
+                    VStack(spacing: 0) {
                         emojiPanel.frame(height: Self.rowsHeight)
-                    } else {
-                        rows
+                        emojiBottomRow
                     }
-                    bottomRow
+                } else {
+                    // All typing keys, one UIKit view (see KeyGrid).
+                    KeyGrid(rows: gridRows, onKey: keyTapped)
+                        .frame(height: Self.rowsHeight + Self.rowHeight)
                 }
             }
         }
@@ -206,39 +208,6 @@ struct KeyboardView: View {
         }
     }
 
-    private var rows: some View {
-        let g = grid
-        return VStack(spacing: 0) {
-            row(g[0])
-            if language == .english && (layer == .letters || layer == .shifted || layer == .capsLock) {
-                // QWERTY's middle row is inset, as people expect.
-                row(g[1]).padding(.horizontal, 18)
-            } else {
-                row(g[1])
-            }
-            HStack(spacing: 0) {
-                leftOfThirdRow.frame(width: 48)
-                row(g[2])
-                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 48)
-            }
-        }
-    }
-
-    @ViewBuilder private var leftOfThirdRow: some View {
-        switch (language, layer) {
-        case (.bengali, .numbers), (.bengali, .symbols):
-            Color.clear
-        case (.english, .numbers):
-            SpecialKey(text: "#+=", label: "আরও চিহ্ন") { layer = .symbols }
-        case (.english, .symbols):
-            SpecialKey(text: "123", label: "সংখ্যা") { layer = .numbers }
-        default:
-            SpecialKey(systemImage: layer == .capsLock ? "capslock.fill" : layer == .shifted ? "shift.fill" : "shift",
-                       highlighted: layer != .letters,
-                       label: layer == .capsLock ? "ক্যাপস লক" : "শিফট") { shiftTapped() }
-        }
-    }
-
     private func shiftTapped() {
         let now = Date()
         defer { lastShiftTap = now }
@@ -257,17 +226,84 @@ struct KeyboardView: View {
         }
     }
 
-    private func row(_ keys: [String]) -> some View {
-        HStack(spacing: 0) {
-            ForEach(keys, id: \.self) { k in
-                LetterKey(label: k) {
-                    onInsert(k)
-                    // Shift is for one letter, like the system keyboard.
-                    if layer == .shifted { layer = .letters }
-                }
-            }
+    // MARK: Key grid
+
+    /// The four rows of the current layer, for KeyGrid.
+    private var gridRows: [KeyRow] {
+        let g = grid
+        let lettersLayer = layer == .letters || layer == .shifted || layer == .capsLock
+        func letters(_ keys: [String]) -> [KeySpec] { keys.map { KeySpec(id: "ch:" + $0, label: $0) } }
+
+        var third: [KeySpec] = []
+        switch (language, layer) {
+        case (.bengali, .numbers), (.bengali, .symbols):
+            third.append(KeySpec(id: "none", style: .blank, width: .fixed(48), accessibility: ""))
+        case (.english, .numbers):
+            third.append(KeySpec(id: "symbols", label: "#+=", style: .special, width: .fixed(48), accessibility: "আরও চিহ্ন"))
+        case (.english, .symbols):
+            third.append(KeySpec(id: "numbers", label: "123", style: .special, width: .fixed(48), accessibility: "সংখ্যা"))
+        default:
+            third.append(KeySpec(id: "shift",
+                                 symbol: layer == .capsLock ? "capslock.fill" : layer == .shifted ? "shift.fill" : "shift",
+                                 style: layer == .letters ? .special : .specialOn, width: .fixed(48),
+                                 accessibility: layer == .capsLock ? "ক্যাপস লক" : "শিফট"))
         }
-        .frame(height: Self.rowHeight)
+        third += letters(g[2])
+        third.append(KeySpec(id: "del", symbol: "delete.left", style: .special, width: .fixed(48), repeats: true, accessibility: "মুছুন"))
+
+        let numbersShown = layer == .numbers || layer == .symbols
+        var bottom: [KeySpec] = [
+            KeySpec(id: "layer", label: numbersShown ? (language == .bengali ? "কখগ" : "ABC") : (language == .bengali ? "১২৩" : "123"),
+                    style: .special, width: .fixed(50), accessibility: numbersShown ? "অক্ষর" : "সংখ্যা"),
+            KeySpec(id: "lang", label: language == .bengali ? "ABC" : "কখগ", style: .special, width: .fixed(50),
+                    accessibility: language == .bengali ? "ইংরেজি কিবোর্ড" : "বাংলা কিবোর্ড"),
+            KeySpec(id: "emoji", symbol: "face.smiling", style: .special, width: .fixed(46), accessibility: "ইমোজি"),
+        ]
+        if model.needsGlobe {
+            bottom.append(KeySpec(id: "globe", symbol: "globe", style: .special, width: .fixed(46), accessibility: "পরের কিবোর্ড"))
+        }
+        bottom += [
+            KeySpec(id: "space", label: language == .bengali ? "স্পেস" : "space", style: .space),
+            KeySpec(id: "stop", label: language == .bengali ? "।" : ".", style: .special, width: .fixed(42), accessibility: "দাঁড়ি"),
+            KeySpec(id: "return", symbol: "return", style: .special, width: .fixed(52), accessibility: "নতুন লাইন"),
+        ]
+        return [
+            KeyRow(keys: letters(g[0])),
+            KeyRow(keys: letters(g[1]), inset: language == .english && lettersLayer ? 18 : 0),
+            KeyRow(keys: third),
+            KeyRow(keys: bottom),
+        ]
+    }
+
+    private func keyTapped(_ id: String) {
+        // Compare Unicode scalars, not Characters: a vowel sign (া, ি …)
+        // combines with the ":" before it into one Character, so
+        // hasPrefix("ch:") would be false for those keys.
+        let scalars = id.unicodeScalars
+        if scalars.starts(with: "ch:".unicodeScalars) {
+            onInsert(String(String.UnicodeScalarView(scalars.dropFirst(3))))
+            // Shift is for one letter, like the system keyboard.
+            if layer == .shifted { layer = .letters }
+            return
+        }
+        switch id {
+        case "shift": shiftTapped()
+        case "del": onDelete()
+        case "symbols": layer = .symbols
+        case "numbers": layer = .numbers
+        case "layer": layer = (layer == .numbers || layer == .symbols) ? .letters : .numbers
+        case "lang": switchLanguage()
+        case "emoji":
+            emojiCategory = recents.isEmpty ? "faces" : "recent"
+            layer = .emoji
+        case "globe": onGlobe()
+        case "space":
+            onSpace(language == .bengali)
+            if layer == .numbers || layer == .symbols { layer = .letters }
+        case "stop": onInsert(language == .bengali ? "।" : ".")
+        case "return": onReturn()
+        default: break
+        }
     }
 
     // MARK: Emoji
@@ -330,44 +366,13 @@ struct KeyboardView: View {
 
     // MARK: Bottom row
 
-    /// ১২৩, then the language key, then 😊, space, ।/., return.
-    private var bottomRow: some View {
+    /// Under the emoji panel: back to letters, the category tabs, delete.
+    private var emojiBottomRow: some View {
         HStack(spacing: 0) {
-            if layer == .emoji {
-                SpecialKey(text: language == .bengali ? "কখগ" : "ABC", label: "অক্ষর") { layer = .letters }
-                    .frame(width: 54)
-                emojiTabs
-                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 48)
-            } else {
-                SpecialKey(text: layer == .numbers || layer == .symbols
-                                ? (language == .bengali ? "কখগ" : "ABC")
-                                : (language == .bengali ? "১২৩" : "123"),
-                           label: layer == .numbers || layer == .symbols ? "অক্ষর" : "সংখ্যা") {
-                    layer = (layer == .numbers || layer == .symbols) ? .letters : .numbers
-                }
-                .frame(width: 50)
-                SpecialKey(text: language == .bengali ? "ABC" : "কখগ",
-                           label: language == .bengali ? "ইংরেজি কিবোর্ড" : "বাংলা কিবোর্ড") { switchLanguage() }
-                    .frame(width: 50)
-                SpecialKey(systemImage: "face.smiling", label: "ইমোজি") {
-                    emojiCategory = recents.isEmpty ? "faces" : "recent"
-                    layer = .emoji
-                }
-                .frame(width: 46)
-                if model.needsGlobe {
-                    SpecialKey(systemImage: "globe", label: "পরের কিবোর্ড", action: onGlobe).frame(width: 46)
-                }
-                LetterKey(label: language == .bengali ? "স্পেস" : "space", insert: false) {
-                    onSpace(language == .bengali)
-                    if layer == .numbers || layer == .symbols { layer = .letters }
-                }
-                if language == .bengali {
-                    SpecialKey(text: "।", label: "দাঁড়ি") { onInsert("।") }.frame(width: 42)
-                } else {
-                    SpecialKey(text: ".", label: "দাঁড়ি") { onInsert(".") }.frame(width: 42)
-                }
-                SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 52)
-            }
+            SpecialKey(text: language == .bengali ? "কখগ" : "ABC", label: "অক্ষর") { layer = .letters }
+                .frame(width: 54)
+            emojiTabs
+            RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 48)
         }
         .frame(height: Self.rowHeight)
     }
