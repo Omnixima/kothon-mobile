@@ -71,6 +71,37 @@ final class KeyboardViewController: UIInputViewController {
         refresh()
     }
 
+    /// Ask iOS to let the keys have touches at the screen edges first.
+    override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.left, .right, .bottom] }
+
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        removeSystemTouchDelays()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
+        removeSystemTouchDelays()
+    }
+
+    /// iOS adds its edge and home-indicator gesture recognizers to the
+    /// keyboard's window; stop them delaying touches to the keys (see KeyGrid).
+    private func removeSystemTouchDelays() {
+        var v: UIView? = view
+        while let current = v {
+            for g in current.gestureRecognizers ?? [] {
+                g.delaysTouchesBegan = false
+                g.delaysTouchesEnded = false
+            }
+            v = current.superview
+        }
+        view.window?.gestureRecognizers?.forEach {
+            $0.delaysTouchesBegan = false
+            $0.delaysTouchesEnded = false
+        }
+    }
+
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         DarwinCenter.shared.removeAll()

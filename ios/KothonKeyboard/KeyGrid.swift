@@ -130,6 +130,7 @@ final class KeyGridView: UIView, UIInputViewAudioFeedback {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        removeSystemTouchDelays()
         guard !rows.isEmpty else { return }
         let rowH = bounds.height / CGFloat(rows.count)
         var i = 0
@@ -220,5 +221,24 @@ final class KeyGridView: UIView, UIInputViewAudioFeedback {
     override func didMoveToWindow() {
         super.didMoveToWindow()
         if window == nil { stopRepeat(); touchKeys.removeAll() }
+        removeSystemTouchDelays()
+    }
+
+    /// The keyboard's window carries iOS's screen-edge and home-indicator
+    /// gesture recognizers, which hold every touch back for a moment
+    /// (delaysTouchesBegan/Ended) before the keys see it; worst on the bottom
+    /// row and the edges. Fast keyboards turn those delays off on every
+    /// recognizer from the keys up to the window. The recognizers still work.
+    /// Re-applied on every layout: iOS can add recognizers after appear.
+    func removeSystemTouchDelays() {
+        guard window != nil else { return }
+        var v: UIView? = self
+        while let current = v {
+            for g in current.gestureRecognizers ?? [] {
+                g.delaysTouchesBegan = false
+                g.delaysTouchesEnded = false
+            }
+            v = current.superview
+        }
     }
 }
