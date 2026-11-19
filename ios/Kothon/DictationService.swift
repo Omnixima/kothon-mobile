@@ -212,6 +212,7 @@ final class DictationService: ObservableObject {
             var settings = DictationSettings.current
             if engine is NeuralEngineEngine {
                 results.append("Neural Engine \(Self.bn(try await time(settings, runs: 3)))")
+                results.append(NeuralEngineEngine.lastBreakdown)
                 benchmarkResult = "\(ModelStore.shared.selected.label), \(Self.bn(lastDuration)) সে. কথা → সময় (সে.): " + results.joined(separator: " · ")
                 return
             }

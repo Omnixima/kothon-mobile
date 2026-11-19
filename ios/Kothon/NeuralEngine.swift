@@ -19,6 +19,8 @@ enum NeuralEngineModels {
 }
 
 final class NeuralEngineEngine: Transcriber {
+    /// Timing breakdown of the last run, for the benchmark readout.
+    nonisolated(unsafe) static var lastBreakdown = ""
     private let whisper: WhisperKit
     let model: SpeechModel
 
@@ -52,6 +54,13 @@ final class NeuralEngineEngine: Transcriber {
                     usePrefillPrompt: true, detectLanguage: false,
                     skipSpecialTokens: true, withoutTimestamps: true)
                 let results = try await whisper.transcribe(audioArray: samples, decodeOptions: options)
+                if let t = results.first?.timings {
+                    // Where the time goes: the encoder (one pass) versus the
+                    // decoder (one step per token). Shown under the benchmark.
+                    NeuralEngineEngine.lastBreakdown = String(
+                        format: "encoder %.2f s · decoder %.2f s, %d tokens",
+                        t.encoding, t.decodingLoop, Int(t.totalDecodingLoops))
+                }
                 outcome = .success(results.map(\.text).joined(separator: " "))
             } catch {
                 outcome = .failure(error)
