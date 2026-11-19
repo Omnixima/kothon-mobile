@@ -16,12 +16,11 @@ struct KeyboardView: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Image("KothonMark").resizable().scaledToFit().frame(height: 14)
-                    .foregroundStyle(Color.accentColor)
-                Text(status).font(.footnote).foregroundStyle(.secondary).lineLimit(2)
+                BrandMark(size: 20)
+                Text(status).font(.bn(.footnote)).foregroundStyle(.secondary).lineLimit(2)
                 Spacer()
                 if model.phase == .recording {
-                    Button("বাতিল", action: onCancel).font(.footnote)
+                    Button("বাতিল", action: onCancel).font(.bn(.footnote))
                 }
             }
             .padding(.horizontal, 14)
@@ -105,7 +104,7 @@ private struct Key: View {
             Group {
                 if let systemImage { Image(systemName: systemImage) } else { Text(label ?? "") }
             }
-            .font(.system(size: 17))
+            .font(.bn(size: 17))
             .frame(maxWidth: .infinity, minHeight: 44)
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 7))
             .foregroundStyle(.primary)
@@ -122,7 +121,7 @@ private struct RepeatKey: View {
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.system(size: 17))
+            .font(.bn(size: 17))
             .frame(maxWidth: .infinity, minHeight: 44)
             .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 7))
             .contentShape(Rectangle())

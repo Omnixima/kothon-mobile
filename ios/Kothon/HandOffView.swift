@@ -15,10 +15,10 @@ struct HandOffView: View {
             VStack(spacing: 28) {
                 HStack {
                     Image(systemName: "arrow.up.backward")
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .font(.bn(.title2, .semibold))
+                        .foregroundStyle(Brand.lilac)
                     Text("উপরের বাঁ কোণের লিংকে চেপে আগের অ্যাপে ফিরে যান")
-                        .font(.subheadline)
+                        .font(.bn(.subheadline))
                     Spacer()
                 }
                 .padding(.horizontal, 20)
@@ -31,13 +31,13 @@ struct HandOffView: View {
                     if dictation.phase == .recording { dictation.stopRecording() }
                     else if dictation.phase == .ready { dictation.startRecording() }
                 }
-                Text(title).font(.title2.weight(.semibold))
+                Text(title).font(.bn(.title2, .semibold))
                 Text("কথন এখন পেছনে শুনছে। আগের অ্যাপে ফিরে গিয়ে কথা বলুন, তারপর কিবোর্ডে থামুন চাপুন, লেখা চলে আসবে।")
-                    .font(.body).foregroundStyle(.secondary)
+                    .font(.bn(.body)).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
                 if let err = dictation.lastError {
-                    Text(err).font(.footnote).foregroundStyle(.red)
+                    Text(err).font(.bn(.footnote)).foregroundStyle(.red)
                 }
 
                 Spacer()

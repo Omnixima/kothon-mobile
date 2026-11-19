@@ -49,6 +49,7 @@ targets:
       properties:
         CFBundleDisplayName: কথন
         CFBundleDevelopmentRegion: bn
+        UIAppFonts: [NotoSansBengali-Variable.ttf]
         UILaunchScreen: {}
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: কথন আপনার কথা শুনে ফোনেই লেখায় রূপ দেয়। কোনো শব্দ ইন্টারনেটে যায় না।
@@ -81,6 +82,7 @@ targets:
       path: KothonKeyboard/Info.plist
       properties:
         CFBundleDisplayName: কথন
+        UIAppFonts: [NotoSansBengali-Variable.ttf]
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
