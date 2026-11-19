@@ -45,11 +45,12 @@ struct SpeechModel: Identifiable, Equatable {
 
     /// নিখুঁত converted to Core ML, for the Neural Engine. The only way to
     /// run it fast from the keyboard: iOS keeps the GPU from background apps.
-    /// Same accuracy as the GGUF on 200 FLEURS clips (8.2% WER both).
+    /// 6-bit palettized weights (557 MB); same accuracy as the GGUF on 200
+    /// FLEURS clips (8.1% WER vs 8.2%).
     static let accurateNeuralEngine = SpeechModel(
         id: "kothon-bn-whisper-medium-coreml", label: "নিখুঁত (Neural Engine)",
-        detail: "Whisper Medium · Core ML · ১.৪ GB · কিবোর্ড থেকেও দ্রুত",
-        repo: "omnixima/bengaliai-whisper-medium-coreml", filename: "", sizeMB: 1400, noTimestamps: true,
+        detail: "Whisper Medium · Core ML · ৫৫৭ MB · কিবোর্ড থেকেও দ্রুত",
+        repo: "omnixima/bengaliai-whisper-medium-coreml", filename: "", sizeMB: 560, noTimestamps: true,
         coreML: (repo: "omnixima/bengaliai-whisper-medium-coreml", variant: "bengaliai-whisper-medium"))
 
     static let all = [fast, accurate, accurateNeuralEngine, neuralEngineTest]
