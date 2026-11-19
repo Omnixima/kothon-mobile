@@ -444,6 +444,18 @@ final class DictationService: ObservableObject {
         let started = Date()
         setEngineStatus(.loading(since: started))
         defer { if loading?.id == modelID { loading = nil } }
+        // Safety stop for the Neural Engine compile: if it hasn't finished in
+        // 10 minutes (older chips can retry forever), say so and suggest দ্রুত.
+        // The compile itself can't be cancelled; we stop waiting for it.
+        let watchdog: Task<Void, Never>? = SpeechModel.all.first(where: { $0.id == modelID })?.isCoreML == true
+            ? Task { [weak self] in
+                try? await Task.sleep(for: .seconds(600))
+                guard !Task.isCancelled, let self, self.loading?.id == modelID else { return }
+                self.loading = nil
+                self.setEngineStatus(.failed(Self.tooSlowMessage))
+            }
+            : nil
+        defer { watchdog?.cancel() }
         do {
             let loaded = try await task.value
             if engineModelID == modelID {
@@ -455,6 +467,8 @@ final class DictationService: ObservableObject {
             throw error
         }
     }
+
+    static let tooSlowMessage = "নিখুঁত এই ফোনে ১০ মিনিটেও প্রস্তুত হয়নি। মডেল থেকে দ্রুত বেছে নিন।"
 
     /// The keyboard shows "মডেল লোড হচ্ছে…" from the shared flag.
     private func setEngineStatus(_ status: EngineStatus) {
@@ -473,6 +487,11 @@ final class DictationService: ObservableObject {
             throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
         }
         if model.isCoreML {
+            // Older chips can't compile it for the Neural Engine (see
+            // ModelStore.olderChip): say so now instead of retrying for minutes.
+            if ModelStore.olderChip {
+                throw EngineError(message: "নিখুঁত (Neural Engine) এই ফোনে চলে না। মডেল থেকে দ্রুত বা নিখুঁত বেছে নিন।")
+            }
             guard let folder = store.coreMLFolder(for: model) else {
                 throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
             }

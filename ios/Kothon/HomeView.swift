@@ -197,6 +197,8 @@ struct HomeView: View {
         case .transcribing:
             return loadingNote ? "মডেল লোড পেছনে চলছে, শেষ হলে লেখা আসবে" : "লিখছি… বাতিল করতে চাপুন"
         default:
+            // E.g. the 10-minute safety stop on the Neural Engine compile.
+            if case .failed(let message) = dictation.engineStatus { return message }
             return "চাপুন আর বাংলায় বলুন"
         }
     }

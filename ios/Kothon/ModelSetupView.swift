@@ -17,7 +17,10 @@ struct ModelSetupView: View {
 
     @State private var choice = ModelStore.recommended
     @State private var punctuation = true
-    private let options = [ModelStore.recommended, SpeechModel.fast]
+    /// The recommendation first.
+    private let options: [SpeechModel] = ModelStore.olderChip
+        ? [.fast, ModelStore.accurateForThisPhone]
+        : [ModelStore.accurateForThisPhone, .fast]
 
     var body: some View {
         ZStack {
@@ -102,7 +105,9 @@ struct ModelSetupView: View {
                     }
                     Text(m == .fast
                          ? "ছোট, তাড়াতাড়ি ডাউনলোড হয় · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB"
-                         : "সবচেয়ে কম ভুল, কিবোর্ড থেকেও দ্রুত · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB")
+                         : ModelStore.olderChip
+                            ? "সবচেয়ে কম ভুল, তবে এই ফোনে কিবোর্ড থেকে ধীর · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB"
+                            : "সবচেয়ে কম ভুল, কিবোর্ড থেকেও দ্রুত · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB")
                         .font(.bn(.subheadline)).foregroundStyle(.white.opacity(0.75))
                     if let problem {
                         Text(problem).font(.bn(.caption, .medium)).foregroundStyle(Brand.softRed)

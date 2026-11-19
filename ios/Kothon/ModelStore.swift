@@ -130,10 +130,29 @@ final class ModelStore: ObservableObject {
         return "জায়গা কম: আরও \(DictationService.bn(gb)) GB খালি করুন"
     }
 
-    /// What we suggest: নিখুঁত on the Neural Engine is the most accurate and
-    /// the only accurate model that stays fast from the keyboard (iOS keeps
-    /// the GPU from background apps).
-    static let recommended = SpeechModel.accurateNeuralEngine
+    /// iPhone 12 and older (A14 and earlier). Their Neural Engine can't
+    /// compile নিখুঁত's encoder: on an iPhone 12 Pro Max the compile gave up
+    /// after 6–7 minutes and restarted, again and again.
+    static let olderChip: Bool = {
+        var info = utsname()
+        uname(&info)
+        // The simulator reports the Mac; it names the simulated iPhone here.
+        let hardware: String = withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        let machine: String = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? hardware
+        // "iPhone13,4" → 13. iPhone13,x is the A14; iPhone14,x the A15.
+        guard machine.hasPrefix("iPhone"),
+              let major = Int(machine.dropFirst("iPhone".count).split(separator: ",").first ?? "") else { return false }
+        return major <= 13
+    }()
+
+    /// What we suggest. On current iPhones, নিখুঁত on the Neural Engine is
+    /// the most accurate and stays fast from the keyboard (iOS keeps the GPU
+    /// from background apps). On older ones, দ্রুত.
+    static var recommended: SpeechModel { olderChip ? .fast : .accurateNeuralEngine }
+
+    /// The নিখুঁত this phone should use: the Neural Engine one, or on older
+    /// phones the GGUF one (GPU in the app, CPU from the keyboard).
+    static var accurateForThisPhone: SpeechModel { olderChip ? .accurate : .accurateNeuralEngine }
 
     private func freeBytes() -> Int64? {
         let values = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])

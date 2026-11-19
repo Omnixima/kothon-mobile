@@ -15,7 +15,15 @@ struct ModelsView: View {
     /// developer mode: on current iPhones the Neural Engine one is faster
     /// from the keyboard and as accurate.
     private var choices: [SpeechModel] {
-        developerMode ? [.accurateNeuralEngine, .fast, .accurate] : [.accurateNeuralEngine, .fast]
+        var list: [SpeechModel] = ModelStore.olderChip
+            ? [.fast, ModelStore.accurateForThisPhone]
+            : [ModelStore.accurateForThisPhone, .fast]
+        if developerMode {
+            list += [SpeechModel.accurate, .accurateNeuralEngine].filter { !list.contains($0) }
+        }
+        // A downloaded model always shows, so it can be deleted.
+        list += SpeechModel.all.filter { models.isInstalled($0) && !list.contains($0) }
+        return list
     }
 
     var body: some View {
@@ -72,13 +80,17 @@ struct ModelsView: View {
     private func description(_ m: SpeechModel) -> String {
         switch m {
         case .fast: "ছোট আর দ্রুত, একটু বেশি ভুল"
-        case .accurateNeuralEngine: "সবচেয়ে কম ভুল, কিবোর্ড থেকেও দ্রুত"
-        default: "নিখুঁত, GPU/CPU-তে (ডেভেলপার)"
+        case .accurateNeuralEngine:
+            ModelStore.olderChip ? "Neural Engine-এ, এই ফোনে চলে না (ডেভেলপার)" : "সবচেয়ে কম ভুল, কিবোর্ড থেকেও দ্রুত"
+        default:
+            ModelStore.olderChip ? "সবচেয়ে কম ভুল, তবে এই ফোনে কিবোর্ড থেকে ধীর" : "নিখুঁত, GPU/CPU-তে (ডেভেলপার)"
         }
     }
 
     private func title(_ m: SpeechModel) -> String {
-        m == .accurate ? "নিখুঁত (GPU)" : (m.label.components(separatedBy: " (").first ?? m.label)
+        if m == .accurate && !ModelStore.olderChip { return "নিখুঁত (GPU)" }
+        if m == .accurateNeuralEngine && ModelStore.olderChip { return "নিখুঁত (Neural Engine)" }
+        return m.label.components(separatedBy: " (").first ?? m.label
     }
 
     private func row(_ m: SpeechModel) -> some View {
