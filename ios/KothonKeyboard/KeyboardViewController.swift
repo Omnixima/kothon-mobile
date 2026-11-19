@@ -35,6 +35,7 @@ final class KeyboardViewController: UIInputViewController {
             onMic: { [weak self] in self?.micTapped() },
             onCancel: { [weak self] in self?.cancelTapped() },
             onInsert: { [weak self] in self?.textDocumentProxy.insertText($0) },
+            onSpace: { [weak self] in self?.space(bengali: $0) },
             onDelete: { [weak self] in self?.textDocumentProxy.deleteBackward() },
             onReturn: { [weak self] in self?.textDocumentProxy.insertText("\n") },
             onGlobe: { [weak self] in self?.advanceToNextInputMode() })
@@ -48,7 +49,7 @@ final class KeyboardViewController: UIInputViewController {
             host.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             host.view.topAnchor.constraint(equalTo: view.topAnchor),
             host.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            host.view.heightAnchor.constraint(equalToConstant: 258),
+            host.view.heightAnchor.constraint(equalToConstant: 262),
         ])
         host.didMove(toParent: self)
     }
@@ -56,6 +57,9 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         model.hasFullAccess = hasFullAccess
+        // Tells the app's setup screen that the keyboard is added and has
+        // Full Access (the App Group is only writable with Full Access).
+        if hasFullAccess { shared.set(Date().timeIntervalSince1970, forKey: SharedKey.keyboardFullAccessSeen) }
         model.needsGlobe = needsInputModeSwitchKey
         lastResultID = shared.integer(forKey: SharedKey.resultID)
         // Coming back from the app after it started recording for us.
@@ -130,6 +134,25 @@ final class KeyboardViewController: UIInputViewController {
             model.message = err
             awaitingResult = false
         }
+    }
+
+    private var lastSpace = Date.distantPast
+
+    /// Space, or "। " / ". " for a quick double space after a word, like
+    /// the system keyboard. Not after a digit or punctuation.
+    private func space(bengali: Bool) {
+        let now = Date()
+        defer { lastSpace = now }
+        let before = textDocumentProxy.documentContextBeforeInput ?? ""
+        if now.timeIntervalSince(lastSpace) < 0.6, before.hasSuffix(" "),
+           let prev = before.dropLast().last,
+           !prev.isWhitespace, !prev.isPunctuation, !prev.isNumber, !prev.isSymbol {
+            textDocumentProxy.deleteBackward()
+            textDocumentProxy.insertText(bengali ? "। " : ". ")
+            lastSpace = .distantPast
+            return
+        }
+        textDocumentProxy.insertText(" ")
     }
 
     /// Insert with a space between dictations, as people expect.

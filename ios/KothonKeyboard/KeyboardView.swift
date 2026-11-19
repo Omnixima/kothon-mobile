@@ -80,6 +80,8 @@ struct KeyboardView: View {
     let onMic: () -> Void
     let onCancel: () -> Void
     let onInsert: (String) -> Void
+    /// Space; a quick second space becomes "। " or ". " (true = Bengali).
+    let onSpace: (Bool) -> Void
     let onDelete: () -> Void
     let onReturn: () -> Void
     let onGlobe: () -> Void
@@ -93,39 +95,57 @@ struct KeyboardView: View {
     /// back to the letters.
     @State private var talkMode = UserDefaults.standard.bool(forKey: "talkMode")
 
-    private static let rowsHeight: CGFloat = 3 * 42 + 2 * 8
+    /// Each key row is 50 pt tall; the key face is inset, so taps between
+    /// keys still land on one.
+    private static let rowHeight: CGFloat = 50
+    private static let rowsHeight: CGFloat = 3 * rowHeight
     private var dictating: Bool { model.phase == .recording || model.phase == .transcribing }
 
     var body: some View {
-        VStack(spacing: 8) {
-            if talkMode || dictating {
+        VStack(spacing: 6) {
+            if talkMode {
                 talkPanel
             } else {
                 DictatePill(phase: model.phase, enabled: model.hasFullAccess, status: status) { pillTapped() }
-                if layer == .emoji {
-                    emojiPanel.frame(height: Self.rowsHeight)
-                } else {
-                    rows
+                VStack(spacing: 0) {
+                    if layer == .emoji {
+                        emojiPanel.frame(height: Self.rowsHeight)
+                    } else {
+                        rows
+                    }
+                    bottomRow
                 }
-                bottomRow
             }
         }
-        .padding(.horizontal, 3)
+        .padding(.horizontal, 1)
         .padding(.top, 6)
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
     // MARK: Talking screen
 
-    /// Speak, see it typed, speak again. Stays until "কিবোর্ড" is tapped.
+    /// Speak, see it typed, speak again. Stays until "কিবোর্ড" is tapped,
+    /// which works in every state (a model load goes on in the background).
     private var talkPanel: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             HStack(spacing: 8) {
-                BrandMark(size: 22)
-                Text(status.isEmpty ? "মাইক চাপুন আর বলুন" : status)
-                    .font(.bn(.footnote, .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                BrandMark(size: 24)
+                if model.modelLoading && model.phase != .recording {
+                    // The one-time Neural Engine prepare: say it plainly.
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(model.modelPreparing ? "কথন প্রস্তুত হচ্ছে…" : "মডেল লোড হচ্ছে…")
+                            .font(.bn(.subheadline, .semibold))
+                            .foregroundStyle(.primary)
+                        Text(model.modelPreparing ? "প্রায় ২ মিনিট, একবারই লাগে। লেখা শেষে নিজেই আসবে।" : "কয়েক সেকেন্ড")
+                            .font(.bn(.caption))
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    Text(status.isEmpty ? "মাইক চাপুন আর বলুন" : status)
+                        .font(.bn(.footnote, .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
                 Spacer(minLength: 0)
                 if model.phase == .recording || (model.phase == .transcribing && !model.modelLoading) {
                     Button("বাতিল", action: onCancel).font(.bn(.footnote, .medium))
@@ -133,23 +153,24 @@ struct KeyboardView: View {
             }
             .padding(.horizontal, 10)
             .frame(height: 46)
-            bigMic.frame(maxWidth: .infinity).frame(height: Self.rowsHeight)
-            HStack(spacing: 5) {
-                Button {
-                    UIDevice.current.playInputClick()
-                    setTalkMode(false)
-                } label: {
-                    Label("কিবোর্ড", systemImage: "keyboard")
-                        .font(.bn(size: 14, .medium))
-                        .frame(maxWidth: .infinity, minHeight: 42)
-                        .background(Brand.violet.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        .foregroundStyle(.primary)
+            VStack(spacing: 0) {
+                bigMic.frame(maxWidth: .infinity).frame(height: Self.rowsHeight)
+                HStack(spacing: 0) {
+                    SpecialKey(text: "কিবোর্ড", systemImage: "keyboard", label: "কিবোর্ড") { setTalkMode(false) }
+                        .frame(width: 112)
+                    SpecialKey(systemImage: "face.smiling", label: "ইমোজি") {
+                        setTalkMode(false)
+                        emojiCategory = recents.isEmpty ? "faces" : "recent"
+                        layer = .emoji
+                    }
+                    .frame(width: 46)
+                    LetterKey(label: language == .bengali ? "স্পেস" : "space", insert: false) {
+                        onSpace(language == .bengali)
+                    }
+                    RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 52)
+                    SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 52)
                 }
-                .buttonStyle(.plain)
-                .frame(width: 116)
-                LetterKey(label: language == .bengali ? "স্পেস" : "space", insert: false) { onInsert(" ") }
-                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 52)
-                SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 52)
+                .frame(height: Self.rowHeight)
             }
         }
     }
@@ -181,7 +202,7 @@ struct KeyboardView: View {
 
     private var rows: some View {
         let g = grid
-        return VStack(spacing: 8) {
+        return VStack(spacing: 0) {
             row(g[0])
             if language == .english && (layer == .letters || layer == .shifted || layer == .capsLock) {
                 // QWERTY's middle row is inset, as people expect.
@@ -189,10 +210,10 @@ struct KeyboardView: View {
             } else {
                 row(g[1])
             }
-            HStack(spacing: 5) {
-                leftOfThirdRow.frame(width: 44)
+            HStack(spacing: 0) {
+                leftOfThirdRow.frame(width: 48)
                 row(g[2])
-                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 44)
+                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 48)
             }
         }
     }
@@ -231,7 +252,7 @@ struct KeyboardView: View {
     }
 
     private func row(_ keys: [String]) -> some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 0) {
             ForEach(keys, id: \.self) { k in
                 LetterKey(label: k) {
                     onInsert(k)
@@ -240,6 +261,7 @@ struct KeyboardView: View {
                 }
             }
         }
+        .frame(height: Self.rowHeight)
     }
 
     // MARK: Emoji
@@ -302,44 +324,46 @@ struct KeyboardView: View {
 
     // MARK: Bottom row
 
+    /// ১২৩, then the language key, then 😊, space, ।/., return.
     private var bottomRow: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 0) {
             if layer == .emoji {
                 SpecialKey(text: language == .bengali ? "কখগ" : "ABC", label: "অক্ষর") { layer = .letters }
-                    .frame(width: 52)
+                    .frame(width: 54)
                 emojiTabs
-                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 44)
+                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 48)
             } else {
-                SpecialKey(text: language == .bengali ? "ABC" : "বাং",
-                           label: language == .bengali ? "ইংরেজি কিবোর্ড" : "বাংলা কিবোর্ড") { switchLanguage() }
-                    .frame(width: 46)
                 SpecialKey(text: layer == .numbers || layer == .symbols
                                 ? (language == .bengali ? "কখগ" : "ABC")
                                 : (language == .bengali ? "১২৩" : "123"),
                            label: layer == .numbers || layer == .symbols ? "অক্ষর" : "সংখ্যা") {
                     layer = (layer == .numbers || layer == .symbols) ? .letters : .numbers
                 }
-                .frame(width: 46)
+                .frame(width: 50)
+                SpecialKey(text: language == .bengali ? "ABC" : "কখগ",
+                           label: language == .bengali ? "ইংরেজি কিবোর্ড" : "বাংলা কিবোর্ড") { switchLanguage() }
+                    .frame(width: 50)
                 SpecialKey(systemImage: "face.smiling", label: "ইমোজি") {
                     emojiCategory = recents.isEmpty ? "faces" : "recent"
                     layer = .emoji
                 }
-                .frame(width: 42)
+                .frame(width: 46)
                 if model.needsGlobe {
-                    SpecialKey(systemImage: "globe", label: "পরের কিবোর্ড", action: onGlobe).frame(width: 42)
+                    SpecialKey(systemImage: "globe", label: "পরের কিবোর্ড", action: onGlobe).frame(width: 46)
                 }
                 LetterKey(label: language == .bengali ? "স্পেস" : "space", insert: false) {
-                    onInsert(" ")
+                    onSpace(language == .bengali)
                     if layer == .numbers || layer == .symbols { layer = .letters }
                 }
                 if language == .bengali {
-                    SpecialKey(text: "।", label: "দাঁড়ি") { onInsert("।") }.frame(width: 38)
+                    SpecialKey(text: "।", label: "দাঁড়ি") { onInsert("।") }.frame(width: 42)
                 } else {
-                    SpecialKey(text: ".", label: "দাঁড়ি") { onInsert(".") }.frame(width: 38)
+                    SpecialKey(text: ".", label: "দাঁড়ি") { onInsert(".") }.frame(width: 42)
                 }
-                SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 48)
+                SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 52)
             }
         }
+        .frame(height: Self.rowHeight)
     }
 
     private func switchLanguage() {
@@ -360,7 +384,10 @@ struct KeyboardView: View {
                     .scaleEffect(model.phase == .recording ? 1 + CGFloat(model.level) * 0.45 : 1)
                     .animation(.easeOut(duration: 0.1), value: model.level)
                 Circle().fill(Brand.micGradient).padding(9)
-                if model.phase == .transcribing {
+                if model.phase == .transcribing && model.modelLoading {
+                    // Waiting for the model: nothing to cancel here.
+                    ProgressView().tint(.white).controlSize(.large)
+                } else if model.phase == .transcribing {
                     VStack(spacing: 2) {
                         ProgressView().tint(.white)
                         Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
@@ -428,20 +455,19 @@ private struct DictatePill: View {
             UIDevice.current.playInputClick()
             action()
         } label: {
-            HStack(spacing: 10) {
-                if phase == .transcribing {
-                    ProgressView().tint(.white).frame(width: 26, height: 21)
-                } else {
-                    Image("KothonMark").resizable().scaledToFit().frame(width: 26, height: 21)
-                }
-                VStack(alignment: .leading, spacing: 0) {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    if phase == .transcribing {
+                        ProgressView().tint(.white).frame(width: 26, height: 21)
+                    } else {
+                        Image("KothonMark").resizable().scaledToFit().frame(width: 26, height: 21)
+                    }
                     Text(phase == .recording ? "থামুন" : phase == .transcribing ? "লিখছি…" : "কথন-এ বলুন")
                         .font(.bn(size: 17, .semibold))
-                    if !status.isEmpty {
-                        Text(status).font(.bn(size: 11)).opacity(0.85).lineLimit(1).minimumScaleFactor(0.8)
-                    }
                 }
-                Spacer(minLength: 0)
+                if !status.isEmpty {
+                    Text(status).font(.bn(size: 11)).opacity(0.85).lineLimit(1).minimumScaleFactor(0.8)
+                }
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 16)
@@ -456,28 +482,51 @@ private struct DictatePill: View {
     }
 }
 
-/// A letter: Noto Sans Bengali on the system key color.
+/// Fires on touch-down, like the system keyboard, so fast typing and
+/// rollover (a second finger landing before the first lifts) never drop a
+/// key. Each key tracks only its own touch.
+private struct TouchDownKey: ViewModifier {
+    let action: () -> Void
+    @Binding var pressed: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                .onChanged { _ in
+                    guard !pressed else { return }
+                    pressed = true
+                    action()
+                    UIDevice.current.playInputClick()
+                }
+                .onEnded { _ in pressed = false })
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { action() }
+    }
+}
+
+/// A letter: Noto Sans Bengali on the system key color. The whole cell is
+/// tappable; the face is inset by the gap between keys.
 private struct LetterKey: View {
     let label: String
     var insert = true
     let action: () -> Void
+    @State private var pressed = false
 
     var body: some View {
-        Button {
-            UIDevice.current.playInputClick()
-            action()
-        } label: {
-            Text(label)
-                .font(.bn(size: insert ? 21 : 15))
-                .minimumScaleFactor(0.6)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, minHeight: 42)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: keyCorner, style: .continuous))
-                .shadow(color: .black.opacity(0.18), radius: 0, y: 1)
-                .foregroundStyle(.primary)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
+        Text(label)
+            .font(.bn(size: insert ? 21 : 15))
+            .minimumScaleFactor(0.6)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(pressed ? Color(.systemGray3) : Color(.secondarySystemBackground),
+                        in: RoundedRectangle(cornerRadius: keyCorner, style: .continuous))
+            .shadow(color: .black.opacity(0.18), radius: 0, y: 1)
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 2.5)
+            .padding(.vertical, 4)
+            .modifier(TouchDownKey(action: action, pressed: $pressed))
+            .accessibilityLabel(label)
     }
 }
 
@@ -488,33 +537,31 @@ private struct SpecialKey: View {
     var highlighted = false
     let label: String
     let action: () -> Void
+    @State private var pressed = false
 
     init(text: String, label: String, action: @escaping () -> Void) {
         self.text = text; self.label = label; self.action = action
     }
 
-    init(systemImage: String, highlighted: Bool = false, label: String, action: @escaping () -> Void) {
-        self.systemImage = systemImage; self.highlighted = highlighted; self.label = label; self.action = action
+    init(text: String? = nil, systemImage: String, highlighted: Bool = false, label: String, action: @escaping () -> Void) {
+        self.text = text; self.systemImage = systemImage; self.highlighted = highlighted; self.label = label; self.action = action
     }
 
     var body: some View {
-        Button {
-            UIDevice.current.playInputClick()
-            action()
-        } label: {
-            Group {
-                if let systemImage { Image(systemName: systemImage) } else { Text(text ?? "") }
-            }
-            .font(.bn(size: 15, .medium))
-            .minimumScaleFactor(0.7)
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .background(highlighted ? Brand.violet.opacity(0.45) : Brand.violet.opacity(0.16),
-                        in: RoundedRectangle(cornerRadius: keyCorner, style: .continuous))
-            .foregroundStyle(.primary)
-            .contentShape(Rectangle())
+        HStack(spacing: 6) {
+            if let systemImage { Image(systemName: systemImage) }
+            if let text { Text(text) }
         }
-        .buttonStyle(.plain)
+        .font(.bn(size: 15, .medium))
+        .minimumScaleFactor(0.7)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(pressed || highlighted ? Brand.violet.opacity(0.45) : Brand.violet.opacity(0.16),
+                    in: RoundedRectangle(cornerRadius: keyCorner, style: .continuous))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 2.5)
+        .padding(.vertical, 4)
+        .modifier(TouchDownKey(action: action, pressed: $pressed))
         .accessibilityLabel(label)
     }
 }
@@ -528,14 +575,17 @@ private struct RepeatKey: View {
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: 17, weight: .medium))
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .background(Brand.violet.opacity(0.16), in: RoundedRectangle(cornerRadius: keyCorner, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(timer != nil ? Brand.violet.opacity(0.45) : Brand.violet.opacity(0.16),
+                        in: RoundedRectangle(cornerRadius: keyCorner, style: .continuous))
+            .padding(.horizontal, 2.5)
+            .padding(.vertical, 4)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in
                     guard timer == nil else { return }
-                    UIDevice.current.playInputClick()
                     action()
+                    UIDevice.current.playInputClick()
                     timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { _ in
                         timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in action() }
                     }
@@ -546,5 +596,6 @@ private struct RepeatKey: View {
                 })
             .accessibilityLabel("মুছুন")
             .accessibilityAddTraits(.isButton)
+            .accessibilityAction { action() }
     }
 }
