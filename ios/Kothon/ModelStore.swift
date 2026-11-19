@@ -111,7 +111,28 @@ final class ModelStore: ObservableObject {
 
     func isDownloading(_ id: String) -> Bool { progress[id] != nil }
 
+    /// Free space the system will give us, in bytes.
+    private func freeBytes() -> Int64? {
+        let values = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
+    }
+
+    /// Refuse a download that wouldn't fit. A Core ML model also needs room
+    /// for the Neural Engine compile that iOS caches on its first load
+    /// (about 1.5× the model); without it, every load compiles from scratch.
+    private func hasRoom(forMB sizeMB: Int, coreML: Bool) -> Bool {
+        let neededMB = coreML ? Int(Double(sizeMB) * 2.5) : sizeMB + 200
+        guard let free = freeBytes() else { return true }
+        let shortMB = neededMB - Int(free / 1_000_000)
+        if shortMB <= 0 { return true }
+        let gb = max(0.1, (Double(shortMB) / 1000 * 10).rounded(.up) / 10)
+        lastError = "ফোনে যথেষ্ট জায়গা নেই: আরও \(DictationService.bn(gb)) GB খালি করুন"
+        return false
+    }
+
     func download(_ model: SpeechModel) async {
+        lastError = nil
+        guard hasRoom(forMB: model.sizeMB, coreML: model.isCoreML) else { return }
         if let coreML = model.coreML {
             guard progress[model.id] == nil else { return }
             progress[model.id] = 0
@@ -133,6 +154,8 @@ final class ModelStore: ObservableObject {
     }
 
     func downloadPunctuation() async {
+        lastError = nil
+        guard hasRoom(forMB: PunctuationModel.sizeMB, coreML: false) else { return }
         try? FileManager.default.createDirectory(at: punctuationDir, withIntermediateDirectories: true)
         let items = PunctuationModel.files.map {
             (URL(string: "\(PunctuationModel.base)/\($0)")!, punctuationDir.appendingPathComponent($0))
