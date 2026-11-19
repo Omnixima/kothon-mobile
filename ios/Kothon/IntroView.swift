@@ -354,7 +354,6 @@ private struct SetupScene: View {
 private struct PrivacyScene: View {
     let active: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
 
     var body: some View {
         ZStack {
@@ -364,28 +363,37 @@ private struct PrivacyScene: View {
                     .strokeBorder(Brand.lilac.opacity(0.5), lineWidth: 2))
                 .frame(width: 150, height: 270)
                 .overlay {
-                    ZStack {
-                        ForEach(0..<3, id: \.self) { i in
-                            Circle()
-                                .strokeBorder(Brand.lilac.opacity(0.45), lineWidth: 1.5)
-                                .frame(width: 60, height: 60)
-                                .scaleEffect(pulse ? 2.1 : 0.9)
-                                .opacity(pulse ? 0 : 0.9)
-                                .animation(reduceMotion ? nil :
-                                    .easeOut(duration: 1.8).repeatForever(autoreverses: false).delay(Double(i) * 0.6),
-                                           value: pulse)
+                    VStack {
+                        ZStack {
+                            // Sound rings, driven by the clock so they never stall.
+                            TimelineView(.animation(paused: !active || reduceMotion)) { context in
+                                let t = context.date.timeIntervalSinceReferenceDate
+                                ZStack {
+                                    ForEach(0..<3, id: \.self) { i in
+                                        let p = (t / 1.8 + Double(i) / 3).truncatingRemainder(dividingBy: 1)
+                                        Circle()
+                                            .strokeBorder(Brand.lilac.opacity(0.55), lineWidth: 1.5)
+                                            .frame(width: 92, height: 92)
+                                            .scaleEffect(1 + 0.45 * p)
+                                            .opacity(reduceMotion ? 0 : 1 - p)
+                                    }
+                                }
+                            }
+                            BrandMark(size: 88)
+                                .shadow(color: Brand.violet.opacity(0.6), radius: 14, y: 8)
+                                // The lock sits on the tile's corner, whole and on top.
+                                .overlay(alignment: .bottomTrailing) {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 13, weight: .bold))
+                                        .foregroundStyle(Brand.plum)
+                                        .frame(width: 30, height: 30)
+                                        .background(Brand.lilac, in: Circle())
+                                        .overlay(Circle().strokeBorder(Brand.plum, lineWidth: 1.5))
+                                        .offset(x: 9, y: 9)
+                                }
                         }
-                        Circle().fill(Brand.micGradient).frame(width: 64, height: 64)
-                            .overlay(Image("KothonMark").resizable().scaledToFit()
-                                .foregroundStyle(.white).frame(width: 32))
-                        Image(systemName: "lock.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .padding(8)
-                            .background(Brand.plum, in: Circle())
-                            .overlay(Circle().strokeBorder(Brand.lilac.opacity(0.5)))
-                            .offset(x: 26, y: 26)
+                        .frame(width: 140, height: 140)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
                 }
             Image(systemName: "icloud.slash")
                 .font(.system(size: 34, weight: .medium))
@@ -396,6 +404,5 @@ private struct PrivacyScene: View {
                 .foregroundStyle(Brand.lilac.opacity(0.55))
                 .offset(x: -105, y: 95)
         }
-        .onChange(of: active, initial: true) { _, isActive in pulse = isActive }
     }
 }
