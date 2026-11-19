@@ -55,6 +55,7 @@ struct HomeView: View {
             KothonBackdrop()
             VStack(spacing: 12) {
                 topBar
+                if dictation.isLoadingModel { LoadingCard() }
                 if dictation.phase != .off { sessionPill }
                 Spacer(minLength: 8)
                 micArea
@@ -181,9 +182,6 @@ struct HomeView: View {
         case .transcribing:
             return loadingNote ? "মডেল লোড পেছনে চলছে, শেষ হলে লেখা আসবে" : "লিখছি… বাতিল করতে চাপুন"
         default:
-            if case .loading = dictation.engineStatus, dictation.preparingAfterUpdate {
-                return "আপডেটের পর একবারই হয়, প্রায় ২ মিনিট। অ্যাপ খোলা রাখুন।"
-            }
             return "চাপুন আর বাংলায় বলুন"
         }
     }
@@ -248,6 +246,43 @@ struct HomeView: View {
     }
 }
 
+/// Full width under the header while the model loads: what's happening,
+/// how long so far, and for the one-time Neural Engine prepare, roughly how
+/// much is left.
+struct LoadingCard: View {
+    @EnvironmentObject var dictation: DictationService
+
+    var body: some View {
+        if case .loading(let since) = dictation.engineStatus {
+            TimelineView(.periodic(from: since, by: 1)) { context in
+                let elapsed = context.date.timeIntervalSince(since)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 10) {
+                        ProgressView().tint(Brand.lilac)
+                        Text(dictation.preparingAfterUpdate ? "Neural Engine-এর জন্য প্রস্তুত হচ্ছে" : "মডেল লোড হচ্ছে")
+                            .font(.bn(.headline, .semibold))
+                        Spacer(minLength: 0)
+                        Text("\(DictationService.bn(elapsed, digits: 0)) সে.")
+                            .font(.bn(.subheadline, .medium)).monospacedDigit()
+                            .foregroundStyle(Brand.lilac)
+                    }
+                    if dictation.preparingAfterUpdate {
+                        // About 2 minutes; never claims to be done before it is.
+                        ProgressView(value: min(elapsed / 120, 0.95))
+                            .tint(Brand.violetLight)
+                        Text("প্রায় ২ মিনিট, একবারই লাগে। অ্যাপ খোলা রাখুন।")
+                            .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
+                    }
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Brand.lilac.opacity(0.25)))
+                .accessibilityElement(children: .combine)
+            }
+        }
+    }
+}
+
 /// The top-right pill: is the selected model ready?
 struct ModelStatusPill: View {
     @EnvironmentObject var dictation: DictationService
@@ -276,7 +311,7 @@ struct ModelStatusPill: View {
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         pill {
                             ProgressView().controlSize(.mini).tint(Brand.lilac)
-                            Text("\(dictation.preparingAfterUpdate ? "Neural Engine-এর জন্য প্রস্তুত হচ্ছে…" : "লোড হচ্ছে…") \(DictationService.bn(context.date.timeIntervalSince(since), digits: 0)) সে.")
+                            Text(dictation.preparingAfterUpdate ? "প্রস্তুত হচ্ছে" : "লোড হচ্ছে")
                         }
                     }
                 case .ready:
@@ -323,23 +358,7 @@ private struct HomeSheetView: View {
                         ModelCard()
                         if developerMode { BenchmarkCard() }
                     case .keyboard:
-                        KeyboardSetupCard()
-                        Text("সব কাজ আপনার ফোনেই হয়। কোনো শব্দ বা লেখা ইন্টারনেটে যায় না।")
-                            .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.65))
-                            .multilineTextAlignment(.center)
-                        Button { showIntro = true } label: {
-                            Label("কীভাবে কাজ করে", systemImage: "questionmark.circle")
-                                .font(.bn(.footnote, .medium))
-                        }
-                        .tint(Brand.lilac)
-                        NavigationLink {
-                            AcknowledgementsView()
-                        } label: {
-                            Label("লাইসেন্স ও কৃতজ্ঞতা", systemImage: "heart.text.square")
-                                .font(.bn(.footnote, .medium))
-                        }
-                        .tint(Brand.lilac)
-                        VersionLine(developerMode: $developerMode)
+                        KeyboardSetupView(showIntro: $showIntro, developerMode: $developerMode)
                     case .style:
                         SettingsCard()
                     }
@@ -349,8 +368,12 @@ private struct HomeSheetView: View {
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("হয়ে গেছে") { dismiss() }.font(.bn(.body, .semibold))
+                ToolbarItem(placement: .topBarTrailing) {
+                    // Plain text, not a bordered pill.
+                    Button { dismiss() } label: {
+                        Text("হয়ে গেছে").font(.bn(.body, .semibold)).foregroundStyle(Brand.lilac)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -514,40 +537,6 @@ struct EngineStatusRow: View {
         }
         .font(.bn(.caption))
         .padding(.leading, 30)
-    }
-}
-
-struct KeyboardSetupCard: View {
-    var body: some View {
-        GlassCard {
-            Label("কথন কিবোর্ড চালু করুন", systemImage: "keyboard").font(.bn(.headline, .semibold))
-            VStack(alignment: .leading, spacing: 6) {
-                Text("১. সেটিংস → সাধারণ → কিবোর্ড → কিবোর্ডসমূহ → নতুন কিবোর্ড যোগ করুন → কথন")
-                Text("২. কথন-এ ট্যাপ করে \"Allow Full Access\" চালু করুন। মাইক থেকে লেখা কিবোর্ডে আনতে এটা লাগে; কিবোর্ড ইন্টারনেটে কিছু পাঠায় না।")
-                Text("৩. যেকোনো অ্যাপে 🌐 চেপে কথন বেছে নিন, তারপর বেগুনি \"কথন-এ বলুন\" চাপুন।")
-            }
-            .font(.bn(.subheadline))
-            // iOS draws its own grey dictation mic under every keyboard.
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "info.circle").foregroundStyle(Brand.lilac)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("নিচের ধূসর মাইকটা Apple-এর। কথনে বলতে বেগুনি \"কথন-এ বলুন\" চাপুন।")
-                    Text("চাইলে Apple-এর ডিক্টেশন বন্ধ করতে পারেন: Settings → General → Keyboard → Enable Dictation।")
-                        .foregroundStyle(.white.opacity(0.65))
-                }
-            }
-            .font(.bn(.footnote))
-            .padding(10)
-            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            } label: {
-                Label("সেটিংস খুলুন", systemImage: "gear")
-            }
-            .buttonStyle(.bordered)
-        }
     }
 }
 
