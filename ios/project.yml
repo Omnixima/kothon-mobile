@@ -1,0 +1,90 @@
+# Generate Kothon.xcodeproj with XcodeGen: `brew install xcodegen && xcodegen`
+# (scripts/build-ios.sh does this for you).
+name: Kothon
+options:
+  bundleIdPrefix: com.kothon.dictation
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: 7CPC9RX87Y
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+targets:
+  Kothon:
+    type: application
+    platform: iOS
+    sources:
+      - Kothon
+      - Shared
+    dependencies:
+      - framework: Frameworks/KothonCore.xcframework
+        embed: false
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: Accelerate.framework
+      - sdk: libc++.tbd
+      - target: KothonKeyboard
+        embed: true
+        codeSign: true
+    entitlements:
+      path: Kothon/Kothon.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.kothon.dictation
+    info:
+      path: Kothon/Info.plist
+      properties:
+        CFBundleDisplayName: কথন
+        CFBundleDevelopmentRegion: bn
+        UILaunchScreen: {}
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: কথন আপনার কথা শুনে ফোনেই লেখায় রূপ দেয়। কোনো শব্দ ইন্টারনেটে যায় না।
+        CFBundleURLTypes:
+          - CFBundleURLName: com.kothon.dictation
+            CFBundleURLSchemes: [kothon]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kothon.dictation.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        OTHER_LDFLAGS: ["-lc++"]
+        # The Rust static library is large; dead-strip what the app doesn't call.
+        DEAD_CODE_STRIPPING: YES
+
+  KothonKeyboard:
+    type: app-extension
+    platform: iOS
+    sources:
+      - KothonKeyboard
+      - Shared
+    entitlements:
+      path: KothonKeyboard/KothonKeyboard.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.kothon.dictation
+    info:
+      path: KothonKeyboard/Info.plist
+      properties:
+        CFBundleDisplayName: কথন
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.keyboard-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
+          NSExtensionAttributes:
+            IsASCIICapable: false
+            PrefersRightToLeft: false
+            PrimaryLanguage: bn
+            # Needed for the App Group the app hands text through. The
+            # keyboard itself makes no network requests.
+            RequestsOpenAccess: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kothon.dictation.ios.keyboard
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        APPLICATION_EXTENSION_API_ONLY: YES

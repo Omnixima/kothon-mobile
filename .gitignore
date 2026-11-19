@@ -1,0 +1,6 @@
+target/
+.DS_Store
+*.xcodeproj/
+xcuserdata/
+build/
+ios/Frameworks/

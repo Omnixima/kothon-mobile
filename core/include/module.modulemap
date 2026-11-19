@@ -1,0 +1,4 @@
+module KothonCore {
+    header "kothon_core.h"
+    export *
+}
