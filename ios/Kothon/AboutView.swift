@@ -99,6 +99,7 @@ struct AcknowledgementsView: View {
 struct OmniximaAboutView: View {
     /// Add a website or contact email here when there is one.
     private let links: [(icon: String, title: String, url: String)] = [
+        ("globe", "ওয়েবসাইট", "https://omnixima.com"),
         ("chevron.left.forwardslash.chevron.right", "GitHub-এ কথন", "https://github.com/Omnixima/kothon"),
         ("cube.box", "Hugging Face-এ মডেল", "https://huggingface.co/omnixima"),
         ("exclamationmark.bubble", "সমস্যা জানান", "https://github.com/Omnixima/kothon/issues"),
@@ -118,7 +119,12 @@ struct OmniximaAboutView: View {
                         Image("KothonWordmark").resizable().scaledToFit().frame(height: 30)
                             .foregroundStyle(.white)
                             .accessibilityLabel("কথন")
-                        Text("by Omnixima").font(.system(size: 15, weight: .medium)).foregroundStyle(Brand.lilac)
+                        HStack(spacing: 6) {
+                            Text("by").font(.system(size: 14, weight: .medium)).foregroundStyle(Brand.lilac)
+                            // Omnixima's logo from omnixima.com, its wordmark recolored white.
+                            Image("OmniximaLogo").resizable().scaledToFit().frame(height: 18)
+                                .accessibilityLabel("Omnixima")
+                        }
                     }
                 }
                 VStack(alignment: .leading, spacing: 12) {
