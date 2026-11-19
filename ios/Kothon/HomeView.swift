@@ -389,10 +389,18 @@ private struct HomeSheetView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     // Plain text, not a bordered pill.
+                    // A plain close mark, as in Apple's own sheets.
                     Button { dismiss() } label: {
-                        Text("হয়ে গেছে").font(.bn(.body, .semibold)).foregroundStyle(Brand.lilac)
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.85))
+                            .frame(width: 30, height: 30)
+                            .background(Color.white.opacity(0.14), in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("বন্ধ করুন")
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
