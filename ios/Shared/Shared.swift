@@ -39,6 +39,8 @@ enum SharedKey {
     static let startOnOpen = "startOnOpen"
     /// When the keyboard last ran with Full Access (for the setup checklist).
     static let keyboardFullAccessSeen = "keyboardFullAccessSeen"
+    /// Developer mode: the keyboard tints each key's tap area.
+    static let devHitAreas = "devHitAreas"
     /// Live microphone level 0...1, for the keyboard's meter.
     static let level = "level"
     /// How long the last dictation took, shown in the app.

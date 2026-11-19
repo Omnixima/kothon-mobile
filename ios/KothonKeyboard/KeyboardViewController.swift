@@ -17,6 +17,8 @@ final class KeyboardModel: ObservableObject {
     @Published var modelPreparing = false
     @Published var message: String?
     @Published var hasFullAccess = true
+    /// Developer mode in the app: tint each key's tap area.
+    @Published var showHitAreas = false
     @Published var needsGlobe = true
 }
 
@@ -57,6 +59,7 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         model.hasFullAccess = hasFullAccess
+        model.showHitAreas = shared.bool(forKey: SharedKey.devHitAreas)
         // Tells the app's setup screen that the keyboard is added and has
         // Full Access (the App Group is only writable with Full Access).
         if hasFullAccess { shared.set(Date().timeIntervalSince1970, forKey: SharedKey.keyboardFullAccessSeen) }

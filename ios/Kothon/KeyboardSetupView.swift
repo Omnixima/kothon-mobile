@@ -208,10 +208,14 @@ struct KeyboardSetupView: View {
 private struct DeveloperSection: View {
     @EnvironmentObject var dictation: DictationService
     @State private var hasRecording = false
+    @AppStorage(SharedKey.devHitAreas, store: KothonShared.defaults) private var showHitAreas = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("ডেভেলপার").font(.bn(.headline, .semibold))
+            Toggle("কিবোর্ডে প্রতিটা বোতামের ট্যাপ-এলাকা রঙ করে দেখান", isOn: $showHitAreas)
+                .font(.bn(.subheadline))
+                .tint(Brand.violet)
             if hasRecording {
                 ShareLink(item: DictationService.lastRecordingURL) {
                     Label("শেষ রেকর্ডিং সেভ করুন", systemImage: "square.and.arrow.up")

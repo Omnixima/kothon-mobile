@@ -106,16 +106,20 @@ struct KeyboardView: View {
             if talkMode {
                 talkPanel
             } else {
-                DictatePill(phase: model.phase, enabled: model.hasFullAccess, status: status) { pillTapped() }
-                if layer == .emoji {
-                    VStack(spacing: 0) {
-                        emojiPanel.frame(height: Self.rowsHeight)
-                        emojiBottomRow
+                VStack(spacing: 0) {
+                    DictatePill(phase: model.phase, enabled: model.hasFullAccess, status: status) { pillTapped() }
+                    if layer == .emoji {
+                        VStack(spacing: 0) {
+                            emojiPanel.frame(height: Self.rowsHeight)
+                            emojiBottomRow
+                        }
+                        .padding(.top, 6)
+                    } else {
+                        // All typing keys, one UIKit view (see KeyGrid). The
+                        // 6 pt gap under the button belongs to the first row.
+                        KeyGrid(rows: gridRows, topGap: 6, showHitAreas: model.showHitAreas, onKey: keyTapped)
+                            .frame(height: 6 + Self.rowsHeight + Self.rowHeight)
                     }
-                } else {
-                    // All typing keys, one UIKit view (see KeyGrid).
-                    KeyGrid(rows: gridRows, onKey: keyTapped)
-                        .frame(height: Self.rowsHeight + Self.rowHeight)
                 }
             }
         }

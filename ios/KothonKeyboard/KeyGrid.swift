@@ -28,17 +28,23 @@ struct KeyRow: Equatable {
 /// SwiftUI wrapper. `onKey` gets the key's id on touch-down.
 struct KeyGrid: UIViewRepresentable {
     let rows: [KeyRow]
+    var topGap: CGFloat = 0
+    var showHitAreas = false
     let onKey: (String) -> Void
 
     func makeUIView(context: Context) -> KeyGridView {
         let v = KeyGridView()
         v.onKey = onKey
+        v.topGap = topGap
+        v.showHitAreas = showHitAreas
         v.rows = rows
         return v
     }
 
     func updateUIView(_ v: KeyGridView, context: Context) {
         v.onKey = onKey
+        if v.topGap != topGap { v.topGap = topGap }
+        if v.showHitAreas != showHitAreas { v.showHitAreas = showHitAreas }
         if v.rows != rows { v.rows = rows }
     }
 }
@@ -46,6 +52,15 @@ struct KeyGrid: UIViewRepresentable {
 final class KeyGridView: UIView, UIInputViewAudioFeedback {
     var onKey: (String) -> Void = { _ in }
     var rows: [KeyRow] = [] { didSet { rebuild() } }
+    /// Space above the first row that still belongs to it (the gap under
+    /// the dictation button), so no tap in the key area is lost.
+    var topGap: CGFloat = 0 { didSet { setNeedsLayout() } }
+    /// Developer mode: tint each key's tap area to check there are no gaps.
+    var showHitAreas = false { didSet { setNeedsLayout() } }
+    private var hitOverlays: [UIView] = []
+    /// People tap a little below a key's middle; look this much higher
+    /// when picking the row, as system keyboards do.
+    private static let touchLift: CGFloat = 5
 
     var enableInputClicksWhenVisible: Bool { true }
 
@@ -132,10 +147,10 @@ final class KeyGridView: UIView, UIInputViewAudioFeedback {
         super.layoutSubviews()
         removeSystemTouchDelays()
         guard !rows.isEmpty else { return }
-        let rowH = bounds.height / CGFloat(rows.count)
+        let rowH = (bounds.height - topGap) / CGFloat(rows.count)
         var i = 0
         for (r, row) in rows.enumerated() {
-            let y = CGFloat(r) * rowH
+            let y = topGap + CGFloat(r) * rowH
             let avail = bounds.width - 2 * row.inset
             let fixed = row.keys.reduce(CGFloat(0)) { if case .fixed(let w) = $1.width { return $0 + w }; return $0 }
             let flexCount = CGFloat(row.keys.filter { $0.width == .flex }.count)
@@ -157,12 +172,51 @@ final class KeyGridView: UIView, UIInputViewAudioFeedback {
                 i += 1
             }
         }
+        layoutHitOverlays()
+    }
+
+    private func layoutHitOverlays() {
+        hitOverlays.forEach { $0.removeFromSuperview() }
+        hitOverlays = []
+        guard showHitAreas else { return }
+        let rowH = (bounds.height - topGap) / CGFloat(max(rows.count, 1))
+        for (n, c) in cells.enumerated() {
+            var f = c.hitFrame
+            if f.minY <= topGap + 0.5 { f = CGRect(x: f.minX, y: 0, width: f.width, height: f.maxY) }  // first row's band
+            _ = rowH
+            let o = UIView(frame: f)
+            o.isUserInteractionEnabled = false
+            o.backgroundColor = (n % 2 == 0 ? UIColor.systemPink : UIColor.systemTeal).withAlphaComponent(0.25)
+            o.layer.borderWidth = 0.5
+            o.layer.borderColor = UIColor.white.withAlphaComponent(0.6).cgColor
+            addSubview(o)
+            hitOverlays.append(o)
+        }
     }
 
     // MARK: Touches
 
+    /// Every point maps to a key, as on Gboard: the row by height (each
+    /// row's band runs to the middle of the gaps, the first up into the gap
+    /// under the dictation button, the last to the bottom edge), then the
+    /// key in that row by x, or the nearest one. Blank cells never win.
     private func cellIndex(at p: CGPoint) -> Int? {
-        cells.firstIndex { $0.hitFrame.contains(p) }
+        guard !rows.isEmpty, !cells.isEmpty else { return nil }
+        let rowH = (bounds.height - topGap) / CGFloat(rows.count)
+        let y = p.y - Self.touchLift - topGap
+        let r = min(max(Int((y / rowH).rounded(.down)), 0), rows.count - 1)
+        let start = rows[..<r].reduce(0) { $0 + $1.keys.count }
+        let rowCells = Array(start..<(start + rows[r].keys.count))
+        let usable = rowCells.filter { cells[$0].spec.style != .blank }
+        if let hit = usable.first(where: { p.x >= cells[$0].hitFrame.minX && p.x < cells[$0].hitFrame.maxX }) {
+            return hit
+        }
+        return usable.min { abs(cells[$0].hitFrame.midX - p.x) < abs(cells[$1].hitFrame.midX - p.x) }
+    }
+
+    // Taps a little outside the grid (its edges) still count.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: -8, dy: -4).contains(point)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
