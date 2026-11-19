@@ -48,7 +48,7 @@ struct KeyboardView: View {
                 BrandMark(size: 20)
                 Text(status).font(.bn(.footnote)).foregroundStyle(.secondary).lineLimit(2)
                 Spacer(minLength: 0)
-                if model.phase == .recording {
+                if model.phase == .recording || (model.phase == .transcribing && !model.modelLoading) {
                     Button("বাতিল", action: onCancel).font(.bn(.footnote, .medium))
                 }
             }
@@ -144,7 +144,7 @@ struct KeyboardView: View {
 
     /// While dictating: one big button to stop, with the live level.
     private var bigMic: some View {
-        Button(action: onMic) {
+        Button(action: bigMicTapped) {
             ZStack {
                 Circle()
                     .fill(Brand.violetLight.opacity(0.25))
@@ -152,7 +152,11 @@ struct KeyboardView: View {
                     .animation(.easeOut(duration: 0.1), value: model.level)
                 Circle().fill(Brand.micGradient).padding(9)
                 if model.phase == .transcribing {
-                    ProgressView().tint(.white)
+                    VStack(spacing: 2) {
+                        ProgressView().tint(.white)
+                        Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(.white.opacity(0.8))
+                    }
                 } else {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 30, weight: .semibold))
@@ -162,8 +166,18 @@ struct KeyboardView: View {
             .frame(width: 92, height: 92)
         }
         .buttonStyle(.plain)
-        .disabled(model.phase == .transcribing)
-        .accessibilityLabel(model.phase == .recording ? "থামুন" : "লিখছি")
+        .accessibilityLabel(model.phase == .recording ? "থামুন" : "লেখা বাতিল করুন")
+    }
+
+    /// Recording: stop. Writing: cancel, unless the model is still loading
+    /// (that load is never cancelled; it goes on in the background).
+    private func bigMicTapped() {
+        guard model.phase == .transcribing else { return onMic() }
+        if model.modelLoading {
+            model.message = "মডেল লোড পেছনে চলছে, শেষ হলে লেখা আসবে"
+        } else {
+            onCancel()
+        }
     }
 
     private var status: String {
@@ -179,7 +193,7 @@ struct KeyboardView: View {
         case .off: return "মাইক চাপুন, কথন খুলে শুনতে শুরু করবে"
         case .ready: return "মাইক চাপুন, তারপর বলুন"
         case .recording: return "শুনছি… শেষ হলে থামুন চাপুন"
-        case .transcribing: return "লিখছি…"
+        case .transcribing: return "লিখছি… বাতিল করতে বোতামে চাপুন"
         }
     }
 }

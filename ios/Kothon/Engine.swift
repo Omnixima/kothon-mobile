@@ -9,6 +9,13 @@ protocol Transcriber: AnyObject {
     func transcribe(_ samples: [Float], settings: DictationSettings) throws -> String
     /// Getting ready to run in the background: free what can't be used there.
     func prepareForBackground()
+    /// Stop a running transcribe() early, if the engine can. Thread-safe.
+    func cancel()
+}
+
+extension Transcriber {
+    /// GGUF engines run to the end; their result is dropped instead.
+    func cancel() {}
 }
 
 extension OnDeviceEngine {

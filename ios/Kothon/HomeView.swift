@@ -46,6 +46,8 @@ struct HomeView: View {
     @EnvironmentObject var dictation: DictationService
     @EnvironmentObject var models: ModelStore
     @State private var sheet: HomeSheet?
+    /// Set when a cancel is tapped during a model load, which goes on.
+    @State private var loadingNote = false
     @State private var lastStats = ""
 
     var body: some View {
@@ -72,6 +74,7 @@ struct HomeView: View {
         }
         .onAppear { lastStats = KothonShared.defaults.string(forKey: SharedKey.stats) ?? "" }
         .onChange(of: dictation.lastStats) { _, new in lastStats = new }
+        .onChange(of: dictation.phase) { _, _ in loadingNote = false }
     }
 
     // MARK: Top
@@ -135,9 +138,10 @@ struct HomeView: View {
                     .frame(width: 120, height: 120)
                 }
                 .buttonStyle(.plain)
-                .disabled(!installed || dictation.phase == .transcribing)
+                .disabled(!installed)
                 .opacity(installed ? 1 : 0.55)
-                .accessibilityLabel(dictation.phase == .recording ? "থামুন" : "বলা শুরু করুন")
+                .accessibilityLabel(dictation.phase == .recording ? "থামুন"
+                                    : dictation.phase == .transcribing ? "লেখা বাতিল করুন" : "বলা শুরু করুন")
             }
             .frame(width: 240, height: 240)
             .animation(.easeOut(duration: 0.1), value: dictation.level)
@@ -159,6 +163,11 @@ struct HomeView: View {
     }
 
     private func micTapped() {
+        // While writing, the button cancels; a model load keeps going.
+        if dictation.phase == .transcribing {
+            if dictation.isLoadingModel { loadingNote = true } else { dictation.cancelTranscription() }
+            return
+        }
         Task {
             guard await KothonApp.microphoneAllowed() else { return }
             if dictation.phase == .recording { dictation.stopRecording() } else { dictation.startRecording() }
@@ -169,7 +178,8 @@ struct HomeView: View {
         if !installed { return "আগে একটা মডেল নামান" }
         switch dictation.phase {
         case .recording: return "শুনছি… শেষ হলে আবার চাপুন"
-        case .transcribing: return "লিখছি…"
+        case .transcribing:
+            return loadingNote ? "মডেল লোড পেছনে চলছে, শেষ হলে লেখা আসবে" : "লিখছি… বাতিল করতে চাপুন"
         default:
             if case .loading = dictation.engineStatus, dictation.preparingAfterUpdate {
                 return "আপডেটের পর একবারই হয়, প্রায় ২ মিনিট। অ্যাপ খোলা রাখুন।"

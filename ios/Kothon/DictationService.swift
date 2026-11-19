@@ -54,7 +54,11 @@ final class DictationService: ObservableObject {
         shared.dictationPhase = .off
         DarwinCenter.shared.observe(.start) { [weak self] in self?.startRecording() }
         DarwinCenter.shared.observe(.stop) { [weak self] in self?.stopRecording() }
-        DarwinCenter.shared.observe(.cancel) { [weak self] in self?.cancelRecording() }
+        // From the keyboard: cancel the recording, or the transcription after it.
+        DarwinCenter.shared.observe(.cancel) { [weak self] in
+            guard let self else { return }
+            if self.phase == .transcribing { self.cancelTranscription() } else { self.cancelRecording() }
+        }
         // Background apps can't use the GPU: swap to the CPU copy of the
         // model as the app leaves the screen, while a session keeps it alive.
         NotificationCenter.default.addObserver(
@@ -161,6 +165,8 @@ final class DictationService: ObservableObject {
         let modelID = ModelStore.shared.selectedID
 
         lastSamples = samples
+        runGeneration += 1
+        let generation = runGeneration
 
         Task {
             do {
@@ -177,14 +183,38 @@ final class DictationService: ObservableObject {
                     return
                 }
                 let text = try await run(engine, speech, settings)
+                guard generation == runGeneration else { return }  // cancelled
                 lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(runStart),
                                        load: loadTime, chip: engine is NeuralEngineEngine ? "Neural Engine" : settings.cpuOnly ? "CPU" : "GPU")
                 deliver(text)
             } catch {
+                guard generation == runGeneration else { return }  // cancelled
                 fail(error.localizedDescription)
             }
             if phase == .transcribing { setPhase(.ready) }
         }
+    }
+
+    /// Each dictation's number, so a cancelled one's result is dropped.
+    private var runGeneration = 0
+
+    /// Whether a model load is in progress (the one-time Neural Engine
+    /// compile can take minutes; it is never cancelled).
+    var isLoadingModel: Bool {
+        if case .loading = engineStatus { return true }
+        return false
+    }
+
+    /// Stop the running transcription: drop its result and go back to
+    /// ready. The session stays open. While the model is still loading,
+    /// nothing is cancelled; the load keeps going in the background.
+    func cancelTranscription() {
+        guard phase == .transcribing, !isLoadingModel else { return }
+        runGeneration += 1
+        engine?.cancel()
+        lastActivity = Date()
+        lastStats = ""
+        setPhase(.ready)
     }
 
     private func run(_ engine: Transcriber, _ samples: [Float], _ settings: DictationSettings) async throws -> String {

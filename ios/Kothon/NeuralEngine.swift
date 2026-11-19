@@ -23,6 +23,9 @@ final class NeuralEngineEngine: Transcriber {
     nonisolated(unsafe) static var lastBreakdown = ""
     private let whisper: WhisperKit
     let model: SpeechModel
+    /// The running transcription, so cancel() can stop it.
+    private let lock = NSLock()
+    private var running: Task<Void, Never>?
 
     init(model: SpeechModel, folder: URL) async throws {
         let compute = ModelComputeOptions(
@@ -47,7 +50,7 @@ final class NeuralEngineEngine: Transcriber {
         let done = DispatchSemaphore(value: 0)
         var outcome: Result<String, Error> = .success("")
         let whisper = self.whisper
-        Task.detached(priority: .userInitiated) {
+        let task = Task.detached(priority: .userInitiated) {
             do {
                 let options = DecodingOptions(
                     task: .transcribe, language: "bn", temperature: 0,
@@ -67,12 +70,21 @@ final class NeuralEngineEngine: Transcriber {
             }
             done.signal()
         }
+        lock.lock(); running = task; lock.unlock()
         done.wait()
+        lock.lock(); running = nil; lock.unlock()
+        if task.isCancelled { throw CancellationError() }
         let raw = try outcome.get().trimmingCharacters(in: .whitespacesAndNewlines)
         return Self.postProcess(raw, settings: settings)
     }
 
     func prepareForBackground() {}
+
+    /// WhisperKit checks for cancellation between decoding steps.
+    func cancel() {
+        lock.lock(); let task = running; lock.unlock()
+        task?.cancel()
+    }
 
     /// Kothon's rule-based cleanup (numbers, fillers, English words).
     private static func postProcess(_ text: String, settings: DictationSettings) -> String {
