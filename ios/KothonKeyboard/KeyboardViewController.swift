@@ -96,8 +96,11 @@ final class KeyboardViewController: UIInputViewController {
             shared.set(true, forKey: SharedKey.startOnOpen)
             awaitingResult = true
             lastResultID = shared.integer(forKey: SharedKey.resultID)
-            if !openApp(KothonShared.dictateURL) {
-                model.message = "কথন অ্যাপ খুলে মাইক চাপুন"
+            openApp(KothonShared.dictateURL) { [weak self] opened in
+                guard let self, !opened else { return }
+                self.shared.set(false, forKey: SharedKey.startOnOpen)
+                self.awaitingResult = false
+                self.model.message = "কথন অ্যাপ খুলে মাইক চাপুন"
             }
         }
     }
@@ -138,8 +141,9 @@ final class KeyboardViewController: UIInputViewController {
 
     /// Keyboards can't open URLs through the public API, so walk the
     /// responder chain to the app and call open(_:options:completionHandler:)
-    /// through the runtime, the way Wispr Flow and others do.
-    private func openApp(_ url: URL) -> Bool {
+    /// through the runtime, the way Wispr Flow and others do. `done` gets
+    /// false if that isn't possible or iOS refuses, so the keyboard can say so.
+    private func openApp(_ url: URL, done: @escaping (Bool) -> Void) {
         let selector = NSSelectorFromString("openURL:options:completionHandler:")
         var responder: UIResponder? = self
         while let r = responder {
@@ -149,11 +153,14 @@ final class KeyboardViewController: UIInputViewController {
                 ) -> Void
                 let imp = r.method(for: selector)
                 let open = unsafeBitCast(imp, to: OpenURL.self)
-                open(r, selector, url as NSURL, NSDictionary(), nil)
-                return true
+                let completion: @convention(block) (Bool) -> Void = { ok in
+                    DispatchQueue.main.async { done(ok) }
+                }
+                open(r, selector, url as NSURL, NSDictionary(), completion)
+                return
             }
             responder = r.next
         }
-        return false
+        done(false)
     }
 }
