@@ -24,6 +24,8 @@ final class DictationService: ObservableObject {
     @Published private(set) var lastStats = ""
     @Published private(set) var benchmarking = false
     @Published private(set) var benchmarkResult = ""
+    /// Whether the selected model is in memory, shown on the home screen.
+    @Published private(set) var engineStatus: EngineStatus = .notLoaded
     private var lastSamples: [Float] = []
 
     /// How long an unused session stays open. Wispr Flow uses 5 minutes too.
@@ -273,9 +275,9 @@ final class DictationService: ObservableObject {
     }
 
     /// Bengali digits, one decimal: 4.7 → ৪.৭
-    static func bn(_ x: Double) -> String {
+    static func bn(_ x: Double, digits places: Int = 1) -> String {
         let digits = Array("০১২৩৪৫৬৭৮৯")
-        return String(format: "%.1f", x).map { c in
+        return String(format: "%.\(places)f", x).map { c in
             c.wholeNumberValue.map { String(digits[$0]) } ?? String(c)
         }.joined()
     }
@@ -312,7 +314,8 @@ final class DictationService: ObservableObject {
     // MARK: Engine
 
     /// Load the model as the session opens, so the first dictation doesn't wait.
-    private func preloadEngine() {
+    /// Also the home screen's "লোড করুন".
+    func preloadEngine() {
         let id = ModelStore.shared.selectedID
         Task { _ = try? await loadEngine(modelID: id) }
     }
@@ -326,8 +329,30 @@ final class DictationService: ObservableObject {
         if let loading, loading.id == modelID { return try await loading.task.value }
         let task = Task { try await self.load(modelID: modelID) }
         loading = (modelID, task)
+        let started = Date()
+        setEngineStatus(.loading(since: started))
         defer { if loading?.id == modelID { loading = nil } }
-        return try await task.value
+        do {
+            let loaded = try await task.value
+            if engineModelID == modelID {
+                setEngineStatus(.ready(loadSeconds: Date().timeIntervalSince(started)))
+            }
+            return loaded
+        } catch {
+            if loading?.id == modelID { setEngineStatus(.failed(error.localizedDescription)) }
+            throw error
+        }
+    }
+
+    /// The keyboard shows "মডেল লোড হচ্ছে…" from the shared flag.
+    private func setEngineStatus(_ status: EngineStatus) {
+        engineStatus = status
+        if case .loading = status {
+            shared.set(true, forKey: SharedKey.modelLoading)
+        } else {
+            shared.set(false, forKey: SharedKey.modelLoading)
+        }
+        DarwinCenter.shared.post(.changed)
     }
 
     private func load(modelID: String) async throws -> Transcriber {
@@ -379,6 +404,7 @@ final class DictationService: ObservableObject {
         loading = nil
         engine = nil
         engineModelID = nil
+        setEngineStatus(.notLoaded)
     }
 
     /// After picking another model: load it now if a session is open.
@@ -483,4 +509,11 @@ final class SampleBuffer: @unchecked Sendable {
         samples = []
         return out
     }
+}
+
+enum EngineStatus: Equatable {
+    case notLoaded
+    case loading(since: Date)
+    case ready(loadSeconds: TimeInterval)
+    case failed(String)
 }

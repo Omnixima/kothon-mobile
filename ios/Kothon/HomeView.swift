@@ -90,6 +90,9 @@ struct ModelCard: View {
             ForEach(SpeechModel.all) { model in
                 ModelRow(model: model)
             }
+            if models.isInstalled(models.selected) {
+                EngineStatusRow()
+            }
             Divider()
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
@@ -141,6 +144,48 @@ struct ModelRow: View {
                     .buttonStyle(.borderedProminent)
             }
         }
+    }
+}
+
+/// Whether the selected model is in memory and ready to write.
+struct EngineStatusRow: View {
+    @EnvironmentObject var dictation: DictationService
+    @EnvironmentObject var models: ModelStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            switch dictation.engineStatus {
+            case .notLoaded:
+                Circle().fill(.gray).frame(width: 8, height: 8)
+                Text("মডেল লোড হয়নি").foregroundStyle(.secondary)
+                Spacer()
+                Button("লোড করুন") { dictation.preloadEngine() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            case .loading(let since):
+                ProgressView().controlSize(.small)
+                TimelineView(.periodic(from: since, by: 1)) { context in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("মডেল লোড হচ্ছে… \(DictationService.bn(context.date.timeIntervalSince(since), digits: 0)) সে.")
+                        if models.selected.isCoreML {
+                            Text("প্রথমবার Neural Engine-এর জন্য তৈরি করতে ১–২ মিনিট লাগে, পরে কয়েক সেকেন্ড।")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            case .ready(let seconds):
+                Circle().fill(.green).frame(width: 8, height: 8)
+                Text("মডেল তৈরি")
+                Text("· লোডে \(DictationService.bn(seconds)) সে.").foregroundStyle(.secondary)
+            case .failed(let message):
+                Circle().fill(.red).frame(width: 8, height: 8)
+                Text("লোড হয়নি: \(message)").foregroundStyle(.red).lineLimit(2)
+                Spacer()
+                Button("আবার") { dictation.preloadEngine() }
+                    .buttonStyle(.bordered).controlSize(.small)
+            }
+        }
+        .font(.caption)
+        .padding(.leading, 30)
     }
 }
 

@@ -11,6 +11,8 @@ import UIKit
 final class KeyboardModel: ObservableObject {
     @Published var phase: DictationPhase = .off
     @Published var level: Float = 0
+    /// The app is still loading the speech model.
+    @Published var modelLoading = false
     @Published var message: String?
     @Published var hasFullAccess = true
     @Published var needsGlobe = true
@@ -108,6 +110,7 @@ final class KeyboardViewController: UIInputViewController {
         let alive = shared.sessionAlive
         model.phase = alive ? shared.dictationPhase : .off
         model.level = shared.float(forKey: SharedKey.level)
+        model.modelLoading = alive && shared.bool(forKey: SharedKey.modelLoading)
 
         let id = shared.integer(forKey: SharedKey.resultID)
         if id != lastResultID {

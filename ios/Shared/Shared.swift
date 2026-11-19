@@ -41,6 +41,8 @@ enum SharedKey {
     static let level = "level"
     /// How long the last dictation took, shown in the app.
     static let stats = "stats"
+    /// True while the app loads the speech model into memory.
+    static let modelLoading = "modelLoading"
 }
 
 extension UserDefaults {
