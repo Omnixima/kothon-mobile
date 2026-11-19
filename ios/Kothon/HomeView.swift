@@ -524,9 +524,21 @@ struct KeyboardSetupCard: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("১. সেটিংস → সাধারণ → কিবোর্ড → কিবোর্ডসমূহ → নতুন কিবোর্ড যোগ করুন → কথন")
                 Text("২. কথন-এ ট্যাপ করে \"Allow Full Access\" চালু করুন। মাইক থেকে লেখা কিবোর্ডে আনতে এটা লাগে; কিবোর্ড ইন্টারনেটে কিছু পাঠায় না।")
-                Text("৩. যেকোনো অ্যাপে 🌐 চেপে কথন বেছে নিন, তারপর মাইক চাপুন।")
+                Text("৩. যেকোনো অ্যাপে 🌐 চেপে কথন বেছে নিন, তারপর বেগুনি \"কথন-এ বলুন\" চাপুন।")
             }
             .font(.bn(.subheadline))
+            // iOS draws its own grey dictation mic under every keyboard.
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "info.circle").foregroundStyle(Brand.lilac)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("নিচের ধূসর মাইকটা Apple-এর। কথনে বলতে বেগুনি \"কথন-এ বলুন\" চাপুন।")
+                    Text("চাইলে Apple-এর ডিক্টেশন বন্ধ করতে পারেন: Settings → General → Keyboard → Enable Dictation।")
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+            }
+            .font(.bn(.footnote))
+            .padding(10)
+            .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             Button {
                 if let url = URL(string: UIApplication.openSettingsURLString) {
                     UIApplication.shared.open(url)
