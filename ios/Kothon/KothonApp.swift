@@ -9,8 +9,9 @@ struct KothonApp: App {
     @State private var fromKeyboard = false
     /// The branded launch animation; skipped when the keyboard opened the app.
     @State private var showLaunch = true
-    /// The intro slides show once, on first launch.
-    @AppStorage("introSeen") private var introSeen = false
+    /// The intro slides show once, on first launch. The key changes when the
+    /// slides do, so everyone sees the new ones once.
+    @AppStorage("introSeen.v2") private var introSeen = false
 
     var body: some Scene {
         WindowGroup {
