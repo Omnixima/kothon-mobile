@@ -34,15 +34,6 @@ struct SpeechModel: Identifiable, Equatable {
         repo: "omnixima/bengaliai-whisper-medium-gguf",
         filename: "bengali-whisper-medium-Q8_0.gguf", sizeMB: 793, noTimestamps: true)
 
-    /// Test only: OpenAI Whisper small as Core ML, to measure the Neural
-    /// Engine from the keyboard (in the background) before converting নিখুঁত.
-    /// Its Bengali is poor; only the timing matters.
-    static let neuralEngineTest = SpeechModel(
-        id: "ane-test-whisper-small", label: "পরীক্ষা: Neural Engine",
-        detail: "Whisper small (Core ML) · ~৪৮০ MB · শুধু গতি মাপার জন্য, বাংলা ভালো হবে না",
-        repo: "argmaxinc/whisperkit-coreml", filename: "", sizeMB: 480, noTimestamps: true,
-        coreML: (repo: "argmaxinc/whisperkit-coreml", variant: "openai_whisper-small"))
-
     /// নিখুঁত converted to Core ML, for the Neural Engine. The only way to
     /// run it fast from the keyboard: iOS keeps the GPU from background apps.
     /// 6-bit palettized weights (557 MB); same accuracy as the GGUF on 200
@@ -53,7 +44,7 @@ struct SpeechModel: Identifiable, Equatable {
         repo: "omnixima/bengaliai-whisper-medium-coreml", filename: "", sizeMB: 560, noTimestamps: true,
         coreML: (repo: "omnixima/bengaliai-whisper-medium-coreml", variant: "bengaliai-whisper-medium"))
 
-    static let all = [fast, accurate, accurateNeuralEngine, neuralEngineTest]
+    static let all = [fast, accurate, accurateNeuralEngine]
 }
 
 /// The punctuation model's files (desktop: src-tauri/src/kothon_punct.rs).
