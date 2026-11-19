@@ -4,3 +4,4 @@ target/
 xcuserdata/
 build/
 ios/Frameworks/
+ios/Kothon/silero-vad-v6.2-F32.gguf

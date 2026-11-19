@@ -34,6 +34,13 @@ xcodebuild -create-xcframework \
   -library "core/target/aarch64-apple-ios-sim/$PROFILE/libkothon_core.a" -headers core/include \
   -output "$OUT"
 
+# Silero VAD (same model as the desktop app), bundled in the app.
+VAD=ios/Kothon/silero-vad-v6.2-F32.gguf
+if [[ ! -f "$VAD" ]]; then
+  echo "==> Downloading Silero VAD"
+  curl -fL -o "$VAD" https://huggingface.co/handy-computer/silero-vad-v6.2-gguf/resolve/main/silero-vad-v6.2-F32.gguf
+fi
+
 (cd ios && xcodegen)
 echo
 echo "Done. Open ios/Kothon.xcodeproj, pick your iPhone, and press Run."

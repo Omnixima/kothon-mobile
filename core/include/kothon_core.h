@@ -42,6 +42,15 @@ void kothon_engine_set_cpu(const KothonEngine *engine, int32_t n_threads, bool a
 void kothon_engine_free(KothonEngine *engine);
 void kothon_string_free(char *s);
 
+// Speech detection (Silero VAD v6.2, same as the desktop app).
+typedef struct KothonVad KothonVad;
+KothonVad *kothon_vad_new(const char *path, char **err_out);
+// false: no speech, transcribe nothing. true: speech is in [*start, *end).
+// vad may be NULL for a loudness-only check.
+bool kothon_vad_speech(const KothonVad *vad, const float *pcm, size_t n_samples,
+                       size_t *start, size_t *end);
+void kothon_vad_free(KothonVad *vad);
+
 #ifdef __cplusplus
 }
 #endif

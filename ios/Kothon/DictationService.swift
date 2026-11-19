@@ -163,7 +163,15 @@ final class DictationService: ObservableObject {
                 let engine = try await loadEngine(modelID: modelID)
                 let loadTime = Date().timeIntervalSince(loadStart)
                 let runStart = Date()
-                let text = try await run(engine, samples, settings)
+                guard let speech = await gateSpeech(samples) else {
+                    // Nothing was said: type nothing.
+                    lastStats = ""
+                    shared.set("কিছু শোনা যায়নি", forKey: SharedKey.errorText)
+                    DarwinCenter.shared.post(.changed)
+                    if phase == .transcribing { setPhase(.ready) }
+                    return
+                }
+                let text = try await run(engine, speech, settings)
                 lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(runStart),
                                        load: loadTime, chip: engine is NeuralEngineEngine ? "Neural Engine" : settings.cpuOnly ? "CPU" : "GPU")
                 deliver(text)
@@ -232,6 +240,14 @@ final class DictationService: ObservableObject {
             benchmarkResult = "\(ModelStore.shared.selected.label), \(Self.bn(lastDuration)) সে. কথা → সময় (সে.): " + results.joined(separator: " · ")
         } catch {
             benchmarkResult = "মাপা যায়নি: \(error.localizedDescription)"
+        }
+    }
+
+    private let gate = SpeechGate()
+
+    private func gateSpeech(_ samples: [Float]) async -> [Float]? {
+        await withCheckedContinuation { cont in
+            engineQueue.async { [gate] in cont.resume(returning: gate.speech(in: samples)) }
         }
     }
 

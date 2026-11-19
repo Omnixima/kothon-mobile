@@ -5,7 +5,7 @@ use std::ffi::{c_char, CStr, CString};
 use std::path::Path;
 use std::ptr;
 
-use crate::{numbers::Digits, Engine, Options};
+use crate::{numbers::Digits, vad::Vad, Engine, Options};
 
 /// Mirrors `KothonOptions` in the header.
 #[repr(C)]
@@ -165,5 +165,65 @@ pub unsafe extern "C" fn kothon_engine_free(engine: *mut Engine) {
 pub unsafe extern "C" fn kothon_string_free(s: *mut c_char) {
     if !s.is_null() {
         drop(CString::from_raw(s));
+    }
+}
+
+/// Load the Silero VAD model. NULL on failure, with *err_out set.
+#[no_mangle]
+pub unsafe extern "C" fn kothon_vad_new(path: *const c_char, err_out: *mut *mut c_char) -> *mut Vad {
+    let Some(path) = path_arg(path) else {
+        set_err(err_out, "VAD path is missing or not UTF-8".into());
+        return ptr::null_mut();
+    };
+    match Vad::load(path) {
+        Ok(v) => Box::into_raw(Box::new(v)),
+        Err(e) => {
+            set_err(err_out, format!("{e:#}"));
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Find speech in 16 kHz audio. Returns false when there is none. Otherwise
+/// sets [*start, *end) to the speech, padded. `vad` may be NULL, in which
+/// case only a loudness check runs and the whole clip is returned.
+#[no_mangle]
+pub unsafe extern "C" fn kothon_vad_speech(
+    vad: *const Vad,
+    pcm: *const f32,
+    n_samples: usize,
+    start: *mut usize,
+    end: *mut usize,
+) -> bool {
+    if pcm.is_null() || n_samples == 0 || start.is_null() || end.is_null() {
+        return false;
+    }
+    let samples = std::slice::from_raw_parts(pcm, n_samples);
+    let range = if vad.is_null() {
+        crate::vad::has_energy(samples).then_some((0, n_samples))
+    } else {
+        match (*vad).speech_range(samples) {
+            Ok(r) => r,
+            // A VAD failure must never lose a dictation: keep everything.
+            Err(e) => {
+                log::warn!("Kothon: {e:#}");
+                Some((0, n_samples))
+            }
+        }
+    };
+    match range {
+        Some((s, e)) => {
+            *start = s;
+            *end = e;
+            true
+        }
+        None => false,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn kothon_vad_free(vad: *mut Vad) {
+    if !vad.is_null() {
+        drop(Box::from_raw(vad));
     }
 }

@@ -10,6 +10,7 @@ pub mod ffi;
 pub mod numbers;
 #[cfg(feature = "punct")]
 pub mod punct;
+pub mod vad;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -52,7 +53,7 @@ const SAMPLE_RATE: usize = 16_000;
 
 static BACKENDS: OnceCell<()> = OnceCell::new();
 
-fn init_backends() -> Result<()> {
+pub(crate) fn init_backends() -> Result<()> {
     BACKENDS
         .get_or_try_init(|| {
             transcribe_cpp::init_logging();
