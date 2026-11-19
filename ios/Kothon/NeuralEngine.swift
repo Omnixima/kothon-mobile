@@ -52,8 +52,14 @@ final class NeuralEngineEngine: Transcriber {
         let whisper = self.whisper
         let task = Task.detached(priority: .userInitiated) {
             do {
+                // No temperature fallback: WhisperKit's default retries a
+                // window with random sampling (0.2…1.0) when its thresholds
+                // trip, which they often do for this Bengali fine-tune. On 50
+                // FLEURS clips that took WER from 9.6% to 34.6% and made it
+                // 4× slower. Greedy only, like the accuracy tests.
                 let options = DecodingOptions(
                     task: .transcribe, language: "bn", temperature: 0,
+                    temperatureFallbackCount: 0,
                     usePrefillPrompt: true, detectLanguage: false,
                     skipSpecialTokens: true, withoutTimestamps: true)
                 let results = try await whisper.transcribe(audioArray: samples, decodeOptions: options)
