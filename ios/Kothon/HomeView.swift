@@ -302,6 +302,7 @@ private struct HomeSheetView: View {
     let which: HomeSheet
     @Environment(\.dismiss) private var dismiss
     @State private var showIntro = false
+    @AppStorage("developerMode") private var developerMode = false
 
     var body: some View {
         NavigationStack {
@@ -310,7 +311,7 @@ private struct HomeSheetView: View {
                     switch which {
                     case .models:
                         ModelCard()
-                        BenchmarkCard()
+                        if developerMode { BenchmarkCard() }
                     case .keyboard:
                         KeyboardSetupCard()
                         Text("সব কাজ আপনার ফোনেই হয়। কোনো শব্দ বা লেখা ইন্টারনেটে যায় না।")
@@ -321,6 +322,14 @@ private struct HomeSheetView: View {
                                 .font(.bn(.footnote, .medium))
                         }
                         .tint(Brand.lilac)
+                        NavigationLink {
+                            AcknowledgementsView()
+                        } label: {
+                            Label("লাইসেন্স ও কৃতজ্ঞতা", systemImage: "heart.text.square")
+                                .font(.bn(.footnote, .medium))
+                        }
+                        .tint(Brand.lilac)
+                        VersionLine(developerMode: $developerMode)
                     case .style:
                         SettingsCard()
                     }

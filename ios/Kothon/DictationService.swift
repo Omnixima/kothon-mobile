@@ -285,8 +285,14 @@ final class DictationService: ObservableObject {
         }.joined()
     }
 
+    /// Hidden developer mode (tap the version line 5 times): the speed test,
+    /// chip names and load times.
+    static var developerMode: Bool { UserDefaults.standard.bool(forKey: "developerMode") }
+
     private static func stats(audio: TimeInterval, took: TimeInterval, load: TimeInterval, chip: String) -> String {
-        var s = "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা (\(chip))"
+        var s = "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা"
+        guard developerMode else { return s }
+        s += " (\(chip))"
         if load > 0.2 { s += ", মডেল লোড \(bn(load)) সে." }
         return s
     }
