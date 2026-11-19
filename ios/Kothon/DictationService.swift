@@ -7,6 +7,7 @@
 // turns the microphone off and lets iOS suspend the app.
 
 import AVFoundation
+import BackgroundTasks
 import Foundation
 import UIKit
 
@@ -190,22 +191,57 @@ final class DictationService: ObservableObject {
         do {
             let engine = try await loadEngine(modelID: ModelStore.shared.selectedID)
             var results: [String] = []
-            for cpu in [false, true] {
-                var settings = DictationSettings.current
-                settings.cpuOnly = cpu
+            func time(_ settings: DictationSettings, runs: Int) async throws -> Double {
                 _ = try await run(engine, lastSamples, settings) // warm-up
                 var best = Double.infinity
-                for _ in 0..<3 {
+                for _ in 0..<runs {
                     let t = Date()
                     _ = try await run(engine, lastSamples, settings)
                     best = min(best, Date().timeIntervalSince(t))
                 }
-                results.append("\(cpu ? "CPU" : "GPU"): \(Self.bn(best)) সে.")
+                return best
             }
-            benchmarkResult = "\(ModelStore.shared.selected.label), \(Self.bn(lastDuration)) সে. কথা → " + results.joined(separator: ", ")
+            var settings = DictationSettings.current
+            settings.cpuOnly = false
+            results.append("GPU \(Self.bn(try await time(settings, runs: 2)))")
+
+            // CPU setups worth comparing on phones: Accelerate or plain ggml,
+            // and all cores or only the performance cores.
+            settings.cpuOnly = true
+            if let device = engine as? OnDeviceEngine {
+                var best: (threads: Int32, accel: Bool, time: Double)?
+                for (threads, accel) in [(Int32(0), true), (0, false), (2, false), (4, false)] {
+                    await onEngineQueue { device.setCPU(threads: threads, accel: accel) }
+                    let t = try await time(settings, runs: 1)
+                    results.append("CPU\(threads == 0 ? "" : "×\(threads)")\(accel ? "+BLAS" : "") \(Self.bn(t))")
+                    if t < (best?.time ?? .infinity) { best = (threads, accel, t) }
+                }
+                // Keep the fastest setup for the keyboard's background runs.
+                if let best {
+                    UserDefaults.standard.set(Int(best.threads), forKey: "cpuThreads")
+                    UserDefaults.standard.set(best.accel, forKey: "cpuAccel")
+                    await onEngineQueue { device.setCPU(threads: best.threads, accel: best.accel) }
+                }
+            }
+            results.append("পেছনে GPU: \(Self.backgroundGPUSupported ? "হ্যাঁ" : "না")")
+            benchmarkResult = "\(ModelStore.shared.selected.label), \(Self.bn(lastDuration)) সে. কথা → সময় (সে.): " + results.joined(separator: " · ")
         } catch {
             benchmarkResult = "মাপা যায়নি: \(error.localizedDescription)"
         }
+    }
+
+    private func onEngineQueue(_ work: @escaping () -> Void) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            engineQueue.async { work(); cont.resume() }
+        }
+    }
+
+    /// iOS 26 can grant GPU time to background work on some devices.
+    static var backgroundGPUSupported: Bool {
+        if #available(iOS 26.0, *) {
+            return BGTaskScheduler.supportedResources.contains(.gpu)
+        }
+        return false
     }
 
     func cancelRecording() {
@@ -284,6 +320,11 @@ final class DictationService: ObservableObject {
             engineQueue.async {
                 cont.resume(with: Result { try OnDeviceEngine(model: model, modelURL: modelURL, punctuationDir: punct, cpuOnly: cpuOnly) })
             }
+        }
+        if UserDefaults.standard.object(forKey: "cpuThreads") != nil {
+            let threads = Int32(UserDefaults.standard.integer(forKey: "cpuThreads"))
+            let accel = UserDefaults.standard.bool(forKey: "cpuAccel")
+            await onEngineQueue { loaded.setCPU(threads: threads, accel: accel) }
         }
         // The first run compiles the GPU kernels and pages the weights in;
         // do it now, on a moment of silence, not on the user's dictation.

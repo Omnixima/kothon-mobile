@@ -12,11 +12,14 @@ pub mod numbers;
 pub mod punct;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Mutex;
 
 use anyhow::{anyhow, Result};
 use once_cell::sync::OnceCell;
-use transcribe_cpp::{Backend, ErrorKind, Model, ModelOptions, RunOptions, Session, Task, TimestampKind};
+use transcribe_cpp::{
+    Backend, ErrorKind, Model, ModelOptions, RunOptions, Session, SessionOptions, Task, TimestampKind,
+};
 
 /// How the transcript is cleaned up after the model runs.
 #[derive(Clone, Copy, Debug)]
@@ -66,7 +69,7 @@ struct Loaded {
 }
 
 impl Loaded {
-    fn load(path: &Path, backend: Backend) -> Result<Self> {
+    fn load(path: &Path, backend: Backend, n_threads: i32) -> Result<Self> {
         let model = Model::load_with(
             path,
             &ModelOptions {
@@ -76,7 +79,10 @@ impl Loaded {
         )
         .map_err(|e| anyhow!("Failed to load model: {e}"))?;
         let session = model
-            .session()
+            .session_with(&SessionOptions {
+                n_threads,
+                ..Default::default()
+            })
             .map_err(|e| anyhow!("Failed to create session: {e}"))?;
         Ok(Self {
             session,
@@ -91,6 +97,10 @@ pub struct Engine {
     model_path: PathBuf,
     gpu: Mutex<Option<Loaded>>,
     cpu: Mutex<Option<Loaded>>,
+    /// CPU threads (0 = library default) and whether the CPU copy may use
+    /// Accelerate's BLAS. Tunable while measuring phones.
+    cpu_threads: AtomicI32,
+    cpu_accel: AtomicBool,
     #[cfg(feature = "punct")]
     punctuator: Option<punct::Punctuator>,
 }
@@ -106,6 +116,8 @@ impl Engine {
             model_path: model_path.to_path_buf(),
             gpu: Mutex::new(None),
             cpu: Mutex::new(None),
+            cpu_threads: AtomicI32::new(0),
+            cpu_accel: AtomicBool::new(true),
             #[cfg(feature = "punct")]
             punctuator: punct_dir
                 .filter(|d| d.join("model.safetensors").exists())
@@ -128,14 +140,19 @@ impl Engine {
         cpu_only: bool,
         f: impl FnOnce(&mut Session) -> Result<T, transcribe_cpp::Error>,
     ) -> Result<T> {
-        let (slot, backend) = if cpu_only {
-            (&self.cpu, Backend::CpuAccel)
+        let (slot, backend, threads) = if cpu_only {
+            let backend = if self.cpu_accel.load(Ordering::Relaxed) {
+                Backend::CpuAccel
+            } else {
+                Backend::Cpu
+            };
+            (&self.cpu, backend, self.cpu_threads.load(Ordering::Relaxed))
         } else {
-            (&self.gpu, Backend::Auto)
+            (&self.gpu, Backend::Auto, 0)
         };
         let mut slot = slot.lock().map_err(|_| anyhow!("engine lock poisoned"))?;
         if slot.is_none() {
-            *slot = Some(Loaded::load(&self.model_path, backend)?);
+            *slot = Some(Loaded::load(&self.model_path, backend, threads)?);
         }
         let loaded = slot.as_mut().expect("just loaded");
         f(&mut loaded.session).map_err(|e| {
@@ -154,6 +171,13 @@ impl Engine {
         if let Ok(mut slot) = slot.lock() {
             *slot = None;
         }
+    }
+
+    /// Change how the CPU copy runs; it reloads on next use.
+    pub fn set_cpu_config(&self, n_threads: i32, accel: bool) {
+        self.cpu_threads.store(n_threads, Ordering::Relaxed);
+        self.cpu_accel.store(accel, Ordering::Relaxed);
+        self.unload(true);
     }
 
     /// 16 kHz mono f32 samples in, finished Bengali text out.

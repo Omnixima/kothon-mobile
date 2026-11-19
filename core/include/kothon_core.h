@@ -36,6 +36,9 @@ char *kothon_post_process(const char *text, const KothonOptions *options);
 // Free the GPU (cpu = false) or CPU copy of the model; it reloads when next needed.
 void kothon_engine_unload(const KothonEngine *engine, bool cpu);
 
+// CPU threads (0 = library default) and Accelerate on/off; the CPU copy reloads.
+void kothon_engine_set_cpu(const KothonEngine *engine, int32_t n_threads, bool accel);
+
 void kothon_engine_free(KothonEngine *engine);
 void kothon_string_free(char *s);
 

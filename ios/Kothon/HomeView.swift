@@ -200,7 +200,7 @@ struct TryItCard: View {
             }
             if !lastStats.isEmpty {
                 HStack {
-                    Button(dictation.benchmarking ? "মাপছি…" : "গতি মাপুন") {
+                    Button(dictation.benchmarking ? "মাপছি… (নিখুঁত-এ ২ মিনিট পর্যন্ত)" : "গতি মাপুন") {
                         Task { await dictation.benchmark() }
                     }
                     .buttonStyle(.bordered)

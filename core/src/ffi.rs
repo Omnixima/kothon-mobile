@@ -146,6 +146,14 @@ pub unsafe extern "C" fn kothon_engine_unload(engine: *const Engine, cpu: bool) 
     }
 }
 
+/// Set CPU threads (0 = default) and whether to use Accelerate; the CPU copy reloads.
+#[no_mangle]
+pub unsafe extern "C" fn kothon_engine_set_cpu(engine: *const Engine, n_threads: i32, accel: bool) {
+    if !engine.is_null() {
+        (*engine).set_cpu_config(n_threads, accel);
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn kothon_engine_free(engine: *mut Engine) {
     if !engine.is_null() {

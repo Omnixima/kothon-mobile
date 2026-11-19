@@ -85,6 +85,9 @@ final class OnDeviceEngine: Transcriber {
         return text
     }
 
+    /// CPU threads (0 = library default) and Accelerate on/off. The CPU copy reloads.
+    func setCPU(threads: Int32, accel: Bool) { kothon_engine_set_cpu(handle, threads, accel) }
+
     /// Free the GPU or CPU copy of the model; it reloads when next needed.
     func unload(cpu: Bool) { kothon_engine_unload(handle, cpu) }
 
