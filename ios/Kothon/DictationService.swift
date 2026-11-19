@@ -165,6 +165,10 @@ final class DictationService: ObservableObject {
         let modelID = ModelStore.shared.selectedID
 
         lastSamples = samples
+        if Self.developerMode {
+            let url = Self.lastRecordingURL
+            DispatchQueue.global(qos: .utility).async { Self.writeWAV(samples, to: url) }
+        }
         runGeneration += 1
         let generation = runGeneration
 
@@ -196,14 +200,24 @@ final class DictationService: ObservableObject {
         }
     }
 
-    /// Developer mode: the last recording as a 16 kHz mono WAV in the temp
-    /// folder, to share for testing. Nil if nothing was recorded yet.
-    func exportLastRecording() -> URL? {
-        guard !lastSamples.isEmpty else { return nil }
-        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("kothon-\(stamp).wav")
-        var pcm = Data(capacity: lastSamples.count * 2)
-        for s in lastSamples {
+    /// Developer mode keeps the last recording on disk (overwritten each
+    /// time, removed when developer mode is turned off), so it can be shared
+    /// for testing even after the app restarts.
+    static var lastRecordingURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("developer", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("kothon-last-recording.wav")
+    }
+
+    static func deleteLastRecording() {
+        try? FileManager.default.removeItem(at: lastRecordingURL)
+    }
+
+    /// 16 kHz mono 16-bit WAV.
+    private static func writeWAV(_ samples: [Float], to url: URL) {
+        var pcm = Data(capacity: samples.count * 2)
+        for s in samples {
             var v = Int16(max(-1, min(1, s)) * Float(Int16.max)).littleEndian
             withUnsafeBytes(of: &v) { pcm.append(contentsOf: $0) }
         }
@@ -212,7 +226,7 @@ final class DictationService: ObservableObject {
         var wav = Data("RIFF".utf8) + le32(UInt32(36 + pcm.count)) + Data("WAVE".utf8)
         wav += Data("fmt ".utf8) + le32(16) + le16(1) + le16(1) + le32(16_000) + le32(32_000) + le16(2) + le16(16)
         wav += Data("data".utf8) + le32(UInt32(pcm.count)) + pcm
-        do { try wav.write(to: url); return url } catch { return nil }
+        try? wav.write(to: url, options: .atomic)
     }
 
     /// Each dictation's number, so a cancelled one's result is dropped.

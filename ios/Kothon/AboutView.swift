@@ -30,6 +30,7 @@ struct VersionLine: View {
             if taps >= 5 {
                 taps = 0
                 developerMode.toggle()
+                if !developerMode { DictationService.deleteLastRecording() }
             }
         }
         .accessibilityAddTraits(.isStaticText)

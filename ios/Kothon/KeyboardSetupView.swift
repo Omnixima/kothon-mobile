@@ -19,6 +19,7 @@ struct KeyboardSetupView: View {
             micTip
             privacyBadge
             links
+            if developerMode { DeveloperSection() }
             VersionLine(developerMode: $developerMode)
         }
         .onAppear(perform: refresh)
@@ -198,5 +199,50 @@ struct KeyboardSetupView: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 52)
         .contentShape(Rectangle())
+    }
+}
+
+/// Developer mode only: share the last recording (AirDrop, Files) to test
+/// models with real dictations. The file stays until the next dictation or
+/// until developer mode is turned off.
+private struct DeveloperSection: View {
+    @EnvironmentObject var dictation: DictationService
+    @State private var hasRecording = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("ডেভেলপার").font(.bn(.headline, .semibold))
+            if hasRecording {
+                ShareLink(item: DictationService.lastRecordingURL) {
+                    Label("শেষ রেকর্ডিং সেভ করুন", systemImage: "square.and.arrow.up")
+                        .font(.bn(.body, .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(Brand.violet, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .foregroundStyle(.white)
+                }
+                .buttonStyle(.plain)
+                Text("শেষবার যা বলেছেন তার শব্দ, WAV ফাইল। AirDrop বা Files-এ পাঠাতে পারেন।")
+                    .font(.bn(.caption)).foregroundStyle(.white.opacity(0.6))
+            } else {
+                Label("শেষ রেকর্ডিং সেভ করুন", systemImage: "square.and.arrow.up")
+                    .font(.bn(.body, .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .foregroundStyle(.white.opacity(0.4))
+                Text("এখনো কোনো রেকর্ডিং নেই। ডেভেলপার মোড চালু রেখে একবার বলুন (অ্যাপে বা কিবোর্ডে), তারপর এখানে আসবে।")
+                    .font(.bn(.caption)).foregroundStyle(.white.opacity(0.6))
+            }
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .onAppear(perform: refresh)
+        .onChange(of: dictation.lastStats) { _, _ in
+            // The file is written in the background just after a dictation.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: refresh)
+        }
+    }
+
+    private func refresh() {
+        hasRecording = FileManager.default.fileExists(atPath: DictationService.lastRecordingURL.path)
     }
 }

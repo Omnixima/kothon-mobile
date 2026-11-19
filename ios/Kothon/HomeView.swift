@@ -563,8 +563,6 @@ struct EngineStatusRow: View {
 struct BenchmarkCard: View {
     @EnvironmentObject var dictation: DictationService
     @State private var lastStats = ""
-    /// The last recording as a WAV, written when it changes, not per redraw.
-    @State private var recordingURL: URL?
 
     var body: some View {
         Group {
@@ -582,22 +580,11 @@ struct BenchmarkCard: View {
                 if !dictation.benchmarkResult.isEmpty {
                     Text(dictation.benchmarkResult).font(.bn(.caption)).textSelection(.enabled)
                 }
-                // Share the last recording (AirDrop, Files) for testing models.
-                if let url = recordingURL {
-                    ShareLink(item: url) {
-                        Label("শেষ রেকর্ডিং সেভ করুন", systemImage: "square.and.arrow.up")
-                            .font(.bn(.subheadline, .medium))
-                    }
-                    .buttonStyle(.bordered)
-                }
             }
         }
         }
-        .onAppear {
-            lastStats = KothonShared.defaults.string(forKey: SharedKey.stats) ?? ""
-            recordingURL = dictation.exportLastRecording()
-        }
-            .onChange(of: dictation.lastStats) { _, new in lastStats = new; recordingURL = dictation.exportLastRecording() }
+        .onAppear { lastStats = KothonShared.defaults.string(forKey: SharedKey.stats) ?? "" }
+        .onChange(of: dictation.lastStats) { _, new in lastStats = new }
     }
 }
 
