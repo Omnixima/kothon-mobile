@@ -125,7 +125,7 @@ struct ModelRow: View {
                 .onTapGesture {
                     guard models.isInstalled(model) else { return }
                     models.selectedID = model.id
-                    dictation.unloadEngine()
+                    dictation.modelChanged()
                 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.label).font(.subheadline.weight(.semibold))
@@ -197,6 +197,20 @@ struct TryItCard: View {
             }
             if !lastStats.isEmpty {
                 Text("শেষবার: \(lastStats)").font(.caption).foregroundStyle(.secondary)
+            }
+            if !lastStats.isEmpty {
+                HStack {
+                    Button(dictation.benchmarking ? "মাপছি…" : "গতি মাপুন") {
+                        Task { await dictation.benchmark() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(dictation.benchmarking || dictation.phase == .recording)
+                    Text("শেষ রেকর্ডিংটা GPU আর CPU-তে আবার চালিয়ে দেখায়")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                if !dictation.benchmarkResult.isEmpty {
+                    Text(dictation.benchmarkResult).font(.caption).textSelection(.enabled)
+                }
             }
             if let err = dictation.lastError {
                 Text(err).font(.caption).foregroundStyle(.red)

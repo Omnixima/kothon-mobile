@@ -21,6 +21,9 @@ final class DictationService: ObservableObject {
     @Published private(set) var lastDuration: TimeInterval = 0
     /// "৮.২ সে. কথা → ১.৪ সে.-এ লেখা (CPU)", to see how fast each model is.
     @Published private(set) var lastStats = ""
+    @Published private(set) var benchmarking = false
+    @Published private(set) var benchmarkResult = ""
+    private var lastSamples: [Float] = []
 
     /// How long an unused session stays open. Wispr Flow uses 5 minutes too.
     var idleTimeout: TimeInterval = 5 * 60
@@ -151,22 +154,57 @@ final class DictationService: ObservableObject {
         settings.cpuOnly = UIApplication.shared.applicationState != .active
         let modelID = ModelStore.shared.selectedID
 
+        lastSamples = samples
+
         Task {
             do {
-                let started = Date()
+                let loadStart = Date()
                 let engine = try await loadEngine(modelID: modelID)
-                let text = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
-                    engineQueue.async {
-                        cont.resume(with: Result { try engine.transcribe(samples, settings: settings) })
-                    }
-                }
-                lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(started),
-                                       cpu: settings.cpuOnly)
+                let loadTime = Date().timeIntervalSince(loadStart)
+                let runStart = Date()
+                let text = try await run(engine, samples, settings)
+                lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(runStart),
+                                       load: loadTime, cpu: settings.cpuOnly)
                 deliver(text)
             } catch {
                 fail(error.localizedDescription)
             }
             if phase == .transcribing { setPhase(.ready) }
+        }
+    }
+
+    private func run(_ engine: Transcriber, _ samples: [Float], _ settings: DictationSettings) async throws -> String {
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
+            engineQueue.async {
+                cont.resume(with: Result { try engine.transcribe(samples, settings: settings) })
+            }
+        }
+    }
+
+    /// Re-run the last recording a few times on the GPU and on the CPU, to
+    /// measure the selected model without first-run costs. App must be open.
+    func benchmark() async {
+        guard !lastSamples.isEmpty, phase != .recording, phase != .transcribing else { return }
+        benchmarking = true
+        defer { benchmarking = false }
+        do {
+            let engine = try await loadEngine(modelID: ModelStore.shared.selectedID)
+            var results: [String] = []
+            for cpu in [false, true] {
+                var settings = DictationSettings.current
+                settings.cpuOnly = cpu
+                _ = try await run(engine, lastSamples, settings) // warm-up
+                var best = Double.infinity
+                for _ in 0..<3 {
+                    let t = Date()
+                    _ = try await run(engine, lastSamples, settings)
+                    best = min(best, Date().timeIntervalSince(t))
+                }
+                results.append("\(cpu ? "CPU" : "GPU"): \(Self.bn(best)) সে.")
+            }
+            benchmarkResult = "\(ModelStore.shared.selected.label), \(Self.bn(lastDuration)) সে. কথা → " + results.joined(separator: ", ")
+        } catch {
+            benchmarkResult = "মাপা যায়নি: \(error.localizedDescription)"
         }
     }
 
@@ -176,15 +214,18 @@ final class DictationService: ObservableObject {
         setPhase(.ready)
     }
 
-    private static func stats(audio: TimeInterval, took: TimeInterval, cpu: Bool) -> String {
-        func bn(_ x: Double) -> String {
-            let f = NumberFormatter()
-            f.locale = Locale(identifier: "bn-BD")
-            f.maximumFractionDigits = 1
-            f.minimumFractionDigits = 1
-            return f.string(from: NSNumber(value: x)) ?? String(format: "%.1f", x)
-        }
-        return "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা (\(cpu ? "CPU" : "GPU"))"
+    /// Bengali digits, one decimal: 4.7 → ৪.৭
+    static func bn(_ x: Double) -> String {
+        let digits = Array("০১২৩৪৫৬৭৮৯")
+        return String(format: "%.1f", x).map { c in
+            c.wholeNumberValue.map { String(digits[$0]) } ?? String(c)
+        }.joined()
+    }
+
+    private static func stats(audio: TimeInterval, took: TimeInterval, load: TimeInterval, cpu: Bool) -> String {
+        var s = "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা (\(cpu ? "CPU" : "GPU"))"
+        if load > 0.2 { s += ", মডেল লোড \(bn(load)) সে." }
+        return s
     }
 
     private func deliver(_ text: String) {
@@ -218,8 +259,20 @@ final class DictationService: ObservableObject {
         Task { _ = try? await loadEngine(modelID: id) }
     }
 
+    /// A load in progress, so a dictation that starts while the session is
+    /// still preloading waits for that load instead of starting another.
+    private var loading: (id: String, task: Task<Transcriber, Error>)?
+
     private func loadEngine(modelID: String) async throws -> Transcriber {
         if let engine, engineModelID == modelID { return engine }
+        if let loading, loading.id == modelID { return try await loading.task.value }
+        let task = Task { try await self.load(modelID: modelID) }
+        loading = (modelID, task)
+        defer { if loading?.id == modelID { loading = nil } }
+        return try await task.value
+    }
+
+    private func load(modelID: String) async throws -> Transcriber {
         let store = ModelStore.shared
         guard let model = SpeechModel.all.first(where: { $0.id == modelID }), store.isInstalled(model) else {
             throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
@@ -232,6 +285,11 @@ final class DictationService: ObservableObject {
                 cont.resume(with: Result { try OnDeviceEngine(model: model, modelURL: modelURL, punctuationDir: punct, cpuOnly: cpuOnly) })
             }
         }
+        // The first run compiles the GPU kernels and pages the weights in;
+        // do it now, on a moment of silence, not on the user's dictation.
+        var warm = DictationSettings()
+        warm.cpuOnly = cpuOnly
+        _ = try? await run(loaded, [Float](repeating: 0, count: 16_000), warm)
         engine = loaded
         engineModelID = modelID
         return loaded
@@ -245,8 +303,15 @@ final class DictationService: ObservableObject {
     /// Drop the loaded model, e.g. after switching models or on a memory warning.
     func unloadEngine() {
         guard phase != .transcribing else { return }
+        loading = nil
         engine = nil
         engineModelID = nil
+    }
+
+    /// After picking another model: load it now if a session is open.
+    func modelChanged() {
+        unloadEngine()
+        if phase != .off { preloadEngine() }
     }
 
     // MARK: Levels
