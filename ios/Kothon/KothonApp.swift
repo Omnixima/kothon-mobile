@@ -13,11 +13,33 @@ struct KothonApp: App {
     /// The intro slides show once, on first launch. The key changes when the
     /// slides do, so everyone sees the new ones once.
     @AppStorage("introSeen.v2") private var introSeen = false
+    /// First run, after the intro: pick a model, then set up the keyboard.
+    @AppStorage("modelStepDone") private var modelStepDone = false
+    @AppStorage("keyboardStepDone") private var keyboardStepDone = false
+
+    /// Show the model step only to someone with no model and no download.
+    private var needsModelStep: Bool {
+        !modelStepDone && !SpeechModel.all.contains { models.isInstalled($0) } && models.progress.isEmpty
+    }
+
+    /// Show the keyboard step unless the keyboard has already run with Full Access.
+    private var needsKeyboardStep: Bool {
+        !keyboardStepDone && KothonShared.defaults.double(forKey: SharedKey.keyboardFullAccessSeen) == 0
+    }
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 HomeView()
+                if introSeen && !fromKeyboard && needsModelStep {
+                    ModelSetupView(done: { withAnimation(.easeInOut(duration: 0.35)) { modelStepDone = true } })
+                        .transition(.opacity)
+                        .zIndex(0.8)
+                } else if introSeen && !fromKeyboard && !needsModelStep && needsKeyboardStep {
+                    KeyboardSetupStep(done: { withAnimation(.easeInOut(duration: 0.35)) { keyboardStepDone = true } })
+                        .transition(.opacity)
+                        .zIndex(0.8)
+                }
                 if !introSeen && !fromKeyboard {
                     IntroSlidesView {
                         withAnimation(.easeInOut(duration: 0.35)) { introSeen = true }

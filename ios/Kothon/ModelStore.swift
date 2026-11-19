@@ -112,6 +112,29 @@ final class ModelStore: ObservableObject {
     func isDownloading(_ id: String) -> Bool { progress[id] != nil }
 
     /// Free space the system will give us, in bytes.
+    /// Free space, in MB, for the setup screen.
+    var freeMB: Int? { freeBytes().map { Int($0 / 1_000_000) } }
+
+    /// Space a model needs on this phone (a Core ML one also needs room for
+    /// the Neural Engine compile cache).
+    static func neededMB(_ model: SpeechModel) -> Int {
+        model.isCoreML ? Int(Double(model.sizeMB) * 2.5) : model.sizeMB + 200
+    }
+
+    /// Why this model can't be downloaded now, or nil if it can.
+    func roomProblem(_ model: SpeechModel) -> String? {
+        guard let free = freeMB else { return nil }
+        let short = Self.neededMB(model) - free
+        guard short > 0 else { return nil }
+        let gb = max(0.1, (Double(short) / 1000 * 10).rounded(.up) / 10)
+        return "জায়গা কম: আরও \(DictationService.bn(gb)) GB খালি করুন"
+    }
+
+    /// What we suggest: নিখুঁত on the Neural Engine is the most accurate and
+    /// the only accurate model that stays fast from the keyboard (iOS keeps
+    /// the GPU from background apps).
+    static let recommended = SpeechModel.accurateNeuralEngine
+
     private func freeBytes() -> Int64? {
         let values = try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         return values?.volumeAvailableCapacityForImportantUsage

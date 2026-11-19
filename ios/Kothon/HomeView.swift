@@ -48,6 +48,7 @@ struct HomeView: View {
     @State private var sheet: HomeSheet?
     /// Set when a cancel is tapped during a model load, which goes on.
     @State private var loadingNote = false
+    @State private var showModelSetup = false
     @State private var lastStats = ""
 
     var body: some View {
@@ -68,6 +69,11 @@ struct HomeView: View {
             .padding(.bottom, 12)
         }
         .foregroundStyle(.white)
+        .fullScreenCover(isPresented: $showModelSetup) {
+            ModelSetupView(done: { showModelSetup = false })
+                .environmentObject(models)
+                .environmentObject(dictation)
+        }
         .sheet(item: $sheet) { which in
             HomeSheetView(which: which)
                 .environmentObject(dictation)
@@ -139,7 +145,6 @@ struct HomeView: View {
                     .frame(width: 120, height: 120)
                 }
                 .buttonStyle(.plain)
-                .disabled(!installed)
                 .opacity(installed ? 1 : 0.55)
                 .accessibilityLabel(dictation.phase == .recording ? "থামুন"
                                     : dictation.phase == .transcribing ? "লেখা বাতিল করুন" : "বলা শুরু করুন")
@@ -164,6 +169,11 @@ struct HomeView: View {
     }
 
     private func micTapped() {
+        // No model yet: the mic opens the model picker (unless one is downloading).
+        if !installed {
+            if models.progress[models.selected.id] == nil { showModelSetup = true }
+            return
+        }
         // While writing, the button cancels; a model load keeps going.
         if dictation.phase == .transcribing {
             if dictation.isLoadingModel { loadingNote = true } else { dictation.cancelTranscription() }
@@ -176,7 +186,12 @@ struct HomeView: View {
     }
 
     private var statusLine: String {
-        if !installed { return "আগে একটা মডেল নামান" }
+        if !installed {
+            if let p = models.progress[models.selected.id] {
+                return "\(models.selected.label.components(separatedBy: " (").first ?? "") ডাউনলোড হচ্ছে… \(DictationService.bn(p * 100, digits: 0))% · \(DictationService.bn(Double(models.selected.sizeMB), digits: 0)) MB"
+            }
+            return "শুরু করতে একটা মডেল ডাউনলোড করুন: মাইকে চাপুন"
+        }
         switch dictation.phase {
         case .recording: return "শুনছি… শেষ হলে আবার চাপুন"
         case .transcribing:
@@ -298,7 +313,7 @@ struct ModelStatusPill: View {
         Group {
             if !models.isInstalled(models.selected) {
                 Button(action: openModels) {
-                    pill { Image(systemName: "arrow.down.circle"); Text("মডেল নামান") }
+                    pill { Image(systemName: "arrow.down.circle"); Text("মডেল ডাউনলোড") }
                 }
             } else {
                 switch dictation.engineStatus {
@@ -454,7 +469,7 @@ struct ModelCard: View {
                 } else if let p = models.progress[PunctuationModel.dirName] {
                     ProgressView(value: p).frame(width: 80)
                 } else {
-                    Button("নামান") { Task { await models.downloadPunctuation() } }
+                    Button("ডাউনলোড") { Task { await models.downloadPunctuation() } }
                         .buttonStyle(.bordered)
                 }
             }
@@ -468,7 +483,7 @@ struct ModelCard: View {
                 dictation.modelChanged()
             }
         } message: {
-            Text("তখন লেখায় । , ? বসবে না। পরে আবার নামাতে পারবেন।")
+            Text("তখন লেখায় । , ? বসবে না। পরে আবার ডাউনলোড করতে পারবেন।")
         }
     }
 
@@ -511,14 +526,14 @@ struct ModelRow: View {
             } else if let p = models.progress[model.id] {
                 ProgressView(value: p).frame(width: 80)
             } else {
-                Button("নামান") { Task { await models.download(model) } }
+                Button("ডাউনলোড") { Task { await models.download(model) } }
                     .buttonStyle(.borderedProminent)
             }
         }
         .confirmationDialog("\(model.label) মুছবেন?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("মুছুন", role: .destructive) { models.delete(model) }
         } message: {
-            Text("ফোনে জায়গা খালি হবে। পরে দরকার হলে আবার নামাতে পারবেন।")
+            Text("ফোনে জায়গা খালি হবে। পরে দরকার হলে আবার ডাউনলোড করতে পারবেন।")
         }
     }
 
