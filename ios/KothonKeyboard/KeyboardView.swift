@@ -72,6 +72,7 @@ struct KeyboardView: View {
     private var status: String {
         if let m = model.message { return m }
         if model.modelLoading, model.phase != .recording {
+            if model.modelPreparing { return "কথন প্রস্তুত হচ্ছে… একটু অপেক্ষা করুন" }
             return "মডেল লোড হচ্ছে… প্রথমবার একটু সময় লাগে"
         }
         switch model.phase {

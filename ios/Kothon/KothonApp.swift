@@ -5,6 +5,7 @@ import SwiftUI
 struct KothonApp: App {
     @StateObject private var dictation = DictationService.shared
     @StateObject private var models = ModelStore.shared
+    @Environment(\.scenePhase) private var scenePhase
     /// Set when the keyboard opened the app to start dictating.
     @State private var fromKeyboard = false
     /// The branded launch animation; skipped when the keyboard opened the app.
@@ -48,6 +49,10 @@ struct KothonApp: App {
                 fromKeyboard = true
                 showLaunch = false
                 Task { await startFromKeyboard() }
+            }
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                // The keyboard hand-off loads the model itself (startRecording).
+                if phase == .active && !fromKeyboard { dictation.prepareEngineIfNeeded() }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
                 dictation.unloadEngine()

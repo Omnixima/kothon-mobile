@@ -171,8 +171,8 @@ struct HomeView: View {
         case .recording: return "শুনছি… শেষ হলে আবার চাপুন"
         case .transcribing: return "লিখছি…"
         default:
-            if case .loading = dictation.engineStatus, models.selected.isCoreML {
-                return "প্রথমবার Neural Engine-এর জন্য তৈরি করতে ১–২ মিনিট লাগে, পরে কয়েক সেকেন্ড।"
+            if case .loading = dictation.engineStatus, dictation.preparingAfterUpdate {
+                return "আপডেটের পর একবারই হয়, প্রায় ২ মিনিট। অ্যাপ খোলা রাখুন।"
             }
             return "চাপুন আর বাংলায় বলুন"
         }
@@ -266,7 +266,7 @@ struct ModelStatusPill: View {
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         pill {
                             ProgressView().controlSize(.mini).tint(Brand.lilac)
-                            Text("লোড হচ্ছে… \(DictationService.bn(context.date.timeIntervalSince(since), digits: 0)) সে.")
+                            Text("\(dictation.preparingAfterUpdate ? "Neural Engine-এর জন্য প্রস্তুত হচ্ছে…" : "লোড হচ্ছে…") \(DictationService.bn(context.date.timeIntervalSince(since), digits: 0)) সে.")
                         }
                     }
                 case .ready:

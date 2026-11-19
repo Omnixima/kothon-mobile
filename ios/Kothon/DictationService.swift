@@ -26,6 +26,9 @@ final class DictationService: ObservableObject {
     @Published private(set) var benchmarkResult = ""
     /// Whether the selected model is in memory, shown on the home screen.
     @Published private(set) var engineStatus: EngineStatus = .notLoaded
+    /// The current load is the first one after an app update: iOS compiles a
+    /// Core ML model for the Neural Engine once per app build (~2 minutes).
+    @Published private(set) var preparingAfterUpdate = false
     private var lastSamples: [Float] = []
 
     /// How long an unused session stays open. Wispr Flow uses 5 minutes too.
@@ -318,6 +321,45 @@ final class DictationService: ObservableObject {
     func preloadEngine() {
         let id = ModelStore.shared.selectedID
         Task { _ = try? await loadEngine(modelID: id) }
+    }
+
+    /// This build, e.g. "0.1.0 (2)". iOS's compiled-model cache is per build.
+    static var buildID: String {
+        let info = Bundle.main.infoDictionary
+        return "\(info?["CFBundleShortVersionString"] as? String ?? "?") (\(info?["CFBundleVersion"] as? String ?? "?"))"
+    }
+    private static let preparedBuildKey = "coreml.preparedBuild"
+
+    /// On launch and when the app comes forward: load a Core ML model right
+    /// away, so the one-time Neural Engine compile after an update happens
+    /// while the app is open, not on the first dictation. It runs as a
+    /// background task, so a quick app switch doesn't cut it off; if it is
+    /// cut off, the next launch tries again.
+    func prepareEngineIfNeeded() {
+        let store = ModelStore.shared
+        let model = store.selected
+        guard model.isCoreML, store.isInstalled(model), engine == nil, loading == nil else { return }
+        let firstAfterUpdate = UserDefaults.standard.string(forKey: Self.preparedBuildKey) != Self.buildID
+        preparingAfterUpdate = firstAfterUpdate
+        shared.set(firstAfterUpdate, forKey: SharedKey.modelPreparing)
+
+        var bgTask = UIBackgroundTaskIdentifier.invalid
+        bgTask = UIApplication.shared.beginBackgroundTask(withName: "prepare-model") {
+            UIApplication.shared.endBackgroundTask(bgTask)
+            bgTask = .invalid
+        }
+        Task {
+            if (try? await loadEngine(modelID: model.id)) != nil {
+                UserDefaults.standard.set(Self.buildID, forKey: Self.preparedBuildKey)
+            }
+            preparingAfterUpdate = false
+            shared.set(false, forKey: SharedKey.modelPreparing)
+            DarwinCenter.shared.post(.changed)
+            if bgTask != .invalid {
+                UIApplication.shared.endBackgroundTask(bgTask)
+                bgTask = .invalid
+            }
+        }
     }
 
     /// A load in progress, so a dictation that starts while the session is

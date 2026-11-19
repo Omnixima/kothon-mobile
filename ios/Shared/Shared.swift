@@ -43,6 +43,9 @@ enum SharedKey {
     static let stats = "stats"
     /// True while the app loads the speech model into memory.
     static let modelLoading = "modelLoading"
+    /// True while that load is the one-time Neural Engine compile after an
+    /// app update (about 2 minutes).
+    static let modelPreparing = "modelPreparing"
 }
 
 extension UserDefaults {
