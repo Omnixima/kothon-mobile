@@ -175,6 +175,11 @@ struct KeyboardSetupView: View {
             }
             .buttonStyle(.plain)
             Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 48)
+            NavigationLink { OmniximaAboutView() } label: {
+                linkRow("person.2", "Omnixima সম্পর্কে")
+            }
+            .buttonStyle(.plain)
+            Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 48)
             NavigationLink { AcknowledgementsView() } label: {
                 linkRow("heart.text.square", "লাইসেন্স ও কৃতজ্ঞতা")
             }

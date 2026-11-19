@@ -94,3 +94,71 @@ struct AcknowledgementsView: View {
         }
     }
 }
+
+/// "Omnixima সম্পর্কে": who makes Kothon, and where the code and models live.
+struct OmniximaAboutView: View {
+    /// Add a website or contact email here when there is one.
+    private let links: [(icon: String, title: String, url: String)] = [
+        ("chevron.left.forwardslash.chevron.right", "GitHub-এ কথন", "https://github.com/Omnixima/kothon"),
+        ("cube.box", "Hugging Face-এ মডেল", "https://huggingface.co/omnixima"),
+        ("exclamationmark.bubble", "সমস্যা জানান", "https://github.com/Omnixima/kothon/issues"),
+        ("lock.shield", "প্রাইভেসি পলিসি", "https://github.com/Omnixima/kothon/blob/main/PRIVACY.md"),
+    ]
+
+    private var version: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                HStack(spacing: 14) {
+                    BrandMark(size: 56)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Image("KothonWordmark").resizable().scaledToFit().frame(height: 30)
+                            .foregroundStyle(.white)
+                            .accessibilityLabel("কথন")
+                        Text("by Omnixima").font(.system(size: 15, weight: .medium)).foregroundStyle(Brand.lilac)
+                    }
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("কথন বানিয়েছে Omnixima। আমরা চাই বাংলাভাষী মানুষ নিজের ভাষায় সহজে লিখতে পারুক: ইন্টারনেট ছাড়াই, আর নিজের কথা নিজের ফোনেই রেখে।")
+                    Text("কথন ওপেন সোর্স। কোড GitHub-এ, মডেল Hugging Face-এ, যে কেউ দেখতে ও উন্নত করতে পারে।")
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+                .font(.bn(.body))
+                .fixedSize(horizontal: false, vertical: true)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(links.enumerated()), id: \.offset) { i, link in
+                        if i > 0 { Divider().overlay(Color.white.opacity(0.08)).padding(.leading, 48) }
+                        if let url = URL(string: link.url) {
+                            Link(destination: url) {
+                                HStack(spacing: 14) {
+                                    Image(systemName: link.icon).font(.system(size: 16))
+                                        .foregroundStyle(Brand.lilac).frame(width: 22)
+                                    Text(link.title).font(.bn(.body)).foregroundStyle(.white)
+                                    Spacer()
+                                    Image(systemName: "arrow.up.right").font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.white.opacity(0.35))
+                                }
+                                .padding(.horizontal, 14)
+                                .frame(minHeight: 52)
+                                .contentShape(Rectangle())
+                            }
+                        }
+                    }
+                }
+                .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Text("© ২০২৬ Omnixima · কথন \(version)")
+                    .font(.bn(.caption)).foregroundStyle(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(16)
+        }
+        .background(KothonBackdrop())
+        .navigationTitle("Omnixima সম্পর্কে")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
