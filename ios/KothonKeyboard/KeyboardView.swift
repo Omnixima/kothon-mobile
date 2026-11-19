@@ -156,19 +156,24 @@ struct KeyboardView: View {
             VStack(spacing: 0) {
                 bigMic.frame(maxWidth: .infinity).frame(height: Self.rowsHeight)
                 HStack(spacing: 0) {
-                    SpecialKey(text: "কিবোর্ড", systemImage: "keyboard", label: "কিবোর্ড") { setTalkMode(false) }
-                        .frame(width: 112)
+                    SpecialKey(systemImage: "keyboard", label: "কিবোর্ড") { setTalkMode(false) }
+                        .frame(width: 50)
                     SpecialKey(systemImage: "face.smiling", label: "ইমোজি") {
                         setTalkMode(false)
                         emojiCategory = recents.isEmpty ? "faces" : "recent"
                         layer = .emoji
                     }
                     .frame(width: 46)
+                    SpecialKey(text: ",", label: "কমা") { onInsert(",") }.frame(width: 40)
                     LetterKey(label: language == .bengali ? "স্পেস" : "space", insert: false) {
                         onSpace(language == .bengali)
                     }
-                    RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 52)
-                    SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 52)
+                    SpecialKey(text: language == .bengali ? "।" : ".", label: "দাঁড়ি") {
+                        onInsert(language == .bengali ? "।" : ".")
+                    }
+                    .frame(width: 40)
+                    RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 50)
+                    SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 50)
                 }
                 .frame(height: Self.rowHeight)
             }
