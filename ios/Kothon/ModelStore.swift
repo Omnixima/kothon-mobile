@@ -43,7 +43,16 @@ struct SpeechModel: Identifiable, Equatable {
         repo: "argmaxinc/whisperkit-coreml", filename: "", sizeMB: 480, noTimestamps: true,
         coreML: (repo: "argmaxinc/whisperkit-coreml", variant: "openai_whisper-small"))
 
-    static let all = [fast, accurate, neuralEngineTest]
+    /// নিখুঁত converted to Core ML, for the Neural Engine. The only way to
+    /// run it fast from the keyboard: iOS keeps the GPU from background apps.
+    /// Same accuracy as the GGUF on 200 FLEURS clips (8.2% WER both).
+    static let accurateNeuralEngine = SpeechModel(
+        id: "kothon-bn-whisper-medium-coreml", label: "নিখুঁত (Neural Engine)",
+        detail: "Whisper Medium · Core ML · ১.৪ GB · কিবোর্ড থেকেও দ্রুত",
+        repo: "omnixima/bengaliai-whisper-medium-coreml", filename: "", sizeMB: 1400, noTimestamps: true,
+        coreML: (repo: "omnixima/bengaliai-whisper-medium-coreml", variant: "bengaliai-whisper-medium"))
+
+    static let all = [fast, accurate, accurateNeuralEngine, neuralEngineTest]
 }
 
 /// The punctuation model's files (desktop: src-tauri/src/kothon_punct.rs).
@@ -89,6 +98,15 @@ final class ModelStore: ObservableObject {
 
     /// Where WhisperKit put a Core ML model, once downloaded.
     func coreMLFolder(for model: SpeechModel) -> URL? {
+        // A copy placed in Documents (e.g. with `xcrun devicectl device copy
+        // to`) counts too, for testing before the model is on Hugging Face.
+        if let variant = model.coreML?.variant {
+            let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(variant, isDirectory: true)
+            if FileManager.default.fileExists(atPath: docs.appendingPathComponent("TextDecoder.mlmodelc").path) {
+                return docs
+            }
+        }
         guard let path = UserDefaults.standard.string(forKey: "coreml.\(model.id)"),
               FileManager.default.fileExists(atPath: path) else { return nil }
         return URL(fileURLWithPath: path)
