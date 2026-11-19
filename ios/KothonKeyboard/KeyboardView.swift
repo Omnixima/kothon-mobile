@@ -89,46 +89,80 @@ struct KeyboardView: View {
     @State private var lastShiftTap = Date.distantPast
     @State private var recents: [String] = KeyboardPrefs.recents
     @State private var emojiCategory = "recent"
+    /// The talking screen stays up between dictations until the user goes
+    /// back to the letters.
+    @State private var talkMode = UserDefaults.standard.bool(forKey: "talkMode")
 
     private static let rowsHeight: CGFloat = 3 * 42 + 2 * 8
     private var dictating: Bool { model.phase == .recording || model.phase == .transcribing }
 
     var body: some View {
         VStack(spacing: 8) {
-            topBar
-            if dictating {
-                bigMic.frame(maxWidth: .infinity).frame(height: Self.rowsHeight)
-            } else if layer == .emoji {
-                emojiPanel.frame(height: Self.rowsHeight)
+            if talkMode || dictating {
+                talkPanel
             } else {
-                rows
+                DictatePill(phase: model.phase, enabled: model.hasFullAccess, status: status) { pillTapped() }
+                if layer == .emoji {
+                    emojiPanel.frame(height: Self.rowsHeight)
+                } else {
+                    rows
+                }
+                bottomRow
             }
-            bottomRow
         }
         .padding(.horizontal, 3)
         .padding(.top, 6)
         .padding(.bottom, 4)
     }
 
-    // MARK: Top bar
+    // MARK: Talking screen
 
-    private var topBar: some View {
-        HStack(spacing: 8) {
-            DictatePill(phase: model.phase, enabled: model.hasFullAccess) {
-                if model.phase == .transcribing { bigMicTapped() } else { onMic() }
+    /// Speak, see it typed, speak again. Stays until "কিবোর্ড" is tapped.
+    private var talkPanel: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                BrandMark(size: 22)
+                Text(status.isEmpty ? "মাইক চাপুন আর বলুন" : status)
+                    .font(.bn(.footnote, .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+                if model.phase == .recording || (model.phase == .transcribing && !model.modelLoading) {
+                    Button("বাতিল", action: onCancel).font(.bn(.footnote, .medium))
+                }
             }
-            Text(status)
-                .font(.bn(.caption))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-            Spacer(minLength: 0)
-            if model.phase == .recording || (model.phase == .transcribing && !model.modelLoading) {
-                Button("বাতিল", action: onCancel).font(.bn(.footnote, .medium))
+            .padding(.horizontal, 10)
+            .frame(height: 46)
+            bigMic.frame(maxWidth: .infinity).frame(height: Self.rowsHeight)
+            HStack(spacing: 5) {
+                Button {
+                    UIDevice.current.playInputClick()
+                    setTalkMode(false)
+                } label: {
+                    Label("কিবোর্ড", systemImage: "keyboard")
+                        .font(.bn(size: 14, .medium))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .background(Brand.violet.opacity(0.16), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 116)
+                LetterKey(label: language == .bengali ? "স্পেস" : "space", insert: false) { onInsert(" ") }
+                RepeatKey(systemImage: "delete.left", action: onDelete).frame(width: 52)
+                SpecialKey(systemImage: "return", label: "নতুন লাইন", action: onReturn).frame(width: 52)
             }
         }
-        .padding(.horizontal, 6)
-        .frame(height: 34)
+    }
+
+    private func pillTapped() {
+        guard model.hasFullAccess else { return onMic() }  // explains Full Access
+        setTalkMode(true)
+        if model.phase == .transcribing { bigMicTapped() } else { onMic() }
+    }
+
+    private func setTalkMode(_ on: Bool) {
+        talkMode = on
+        UserDefaults.standard.set(on, forKey: "talkMode")
     }
 
     // MARK: Letter rows
@@ -332,16 +366,20 @@ struct KeyboardView: View {
                         Image(systemName: "xmark").font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white.opacity(0.8))
                     }
-                } else {
+                } else if model.phase == .recording {
                     Image(systemName: "stop.fill")
                         .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(.white)
+                } else {
+                    Image("KothonMark").resizable().scaledToFit().frame(width: 44)
                         .foregroundStyle(.white)
                 }
             }
             .frame(width: 92, height: 92)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(model.phase == .recording ? "থামুন" : "লেখা বাতিল করুন")
+        .accessibilityLabel(model.phase == .recording ? "থামুন"
+                            : model.phase == .transcribing ? "লেখা বাতিল করুন" : "কথন-এ বলুন")
     }
 
     /// Recording: stop. Writing: cancel, unless the model is still loading
@@ -367,7 +405,8 @@ struct KeyboardView: View {
         switch model.phase {
         case .off, .ready: return ""
         case .recording: return "শুনছি… শেষ হলে থামুন"
-        case .transcribing: return "লিখছি…"
+        // The button says "লিখছি…" with a spinner; don't say it twice.
+        case .transcribing: return "বাতিল করতে বোতামে চাপুন"
         }
     }
 }
@@ -376,10 +415,12 @@ struct KeyboardView: View {
 
 private let keyCorner: CGFloat = 8
 
-/// Kothon dictation: the mouth mark on a purple pill, "কথন-এ বলুন".
+/// Kothon dictation: a full-width purple button with the Kothon mark,
+/// "কথন-এ বলুন", and the status under it when there is one.
 private struct DictatePill: View {
     let phase: DictationPhase
     let enabled: Bool
+    let status: String
     let action: () -> Void
 
     var body: some View {
@@ -387,19 +428,30 @@ private struct DictatePill: View {
             UIDevice.current.playInputClick()
             action()
         } label: {
-            HStack(spacing: 6) {
-                Image("KothonMark").resizable().scaledToFit().frame(width: 18, height: 15)
-                Text(phase == .recording ? "থামুন" : phase == .transcribing ? "লিখছি…" : "কথন-এ বলুন")
-                    .font(.bn(size: 14, .semibold))
+            HStack(spacing: 10) {
+                if phase == .transcribing {
+                    ProgressView().tint(.white).frame(width: 26, height: 21)
+                } else {
+                    Image("KothonMark").resizable().scaledToFit().frame(width: 26, height: 21)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(phase == .recording ? "থামুন" : phase == .transcribing ? "লিখছি…" : "কথন-এ বলুন")
+                        .font(.bn(size: 17, .semibold))
+                    if !status.isEmpty {
+                        Text(status).font(.bn(size: 11)).opacity(0.85).lineLimit(1).minimumScaleFactor(0.8)
+                    }
+                }
+                Spacer(minLength: 0)
             }
             .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .frame(height: 30)
-            .background(Brand.micGradient, in: Capsule())
-            .opacity(enabled ? 1 : 0.5)
-            .contentShape(Capsule())
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 46)
+            .background(Brand.micGradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .opacity(enabled ? 1 : 0.55)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, 2)
         .accessibilityLabel(phase == .recording ? "থামুন" : "কথন-এ বলুন")
     }
 }
