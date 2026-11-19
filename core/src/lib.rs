@@ -45,6 +45,8 @@ impl Default for Options {
     }
 }
 
+const SAMPLE_RATE: usize = 16_000;
+
 static BACKENDS: OnceCell<()> = OnceCell::new();
 
 fn init_backends() -> Result<()> {
@@ -170,17 +172,32 @@ impl Engine {
             },
             ..Default::default()
         };
-        let result = self.with_session(options.cpu_only, |s| s.run(pcm, &run));
-        // The GPU can refuse work (on iOS, once the app is in the
-        // background). The CPU always can, so try once more there.
-        let transcript = match result {
-            Err(e) if !options.cpu_only && e.is::<BackendError>() => {
-                log::warn!("Kothon: GPU run failed ({e}), retrying on the CPU");
-                self.with_session(true, |s| s.run(pcm, &run))?
-            }
-            other => other?,
+        // Whisper sees 30 s at a time, so longer recordings are cut at pauses.
+        let pieces: Vec<&[f32]> = if options.no_timestamps {
+            split_at_pauses(pcm, SAMPLE_RATE * 28)
+        } else {
+            vec![pcm]
         };
-        Ok(self.post_process(transcript.text.trim(), options))
+        let mut cpu_only = options.cpu_only;
+        let mut texts = Vec::with_capacity(pieces.len());
+        for piece in pieces {
+            let result = self.with_session(cpu_only, |s| s.run(piece, &run));
+            // The GPU can refuse work (on iOS, once the app is in the
+            // background). The CPU always can, so try once more there.
+            let transcript = match result {
+                Err(e) if !cpu_only && e.is::<BackendError>() => {
+                    log::warn!("Kothon: GPU run failed ({e}), retrying on the CPU");
+                    cpu_only = true;
+                    self.with_session(true, |s| s.run(piece, &run))?
+                }
+                other => other?,
+            };
+            let text = transcript.text.trim().to_string();
+            if !text.is_empty() {
+                texts.push(text);
+            }
+        }
+        Ok(self.post_process(&texts.join(" "), options))
     }
 
     /// Everything after the model, so it can be tested without one.
@@ -227,3 +244,57 @@ impl std::fmt::Display for BackendError {
 }
 
 impl std::error::Error for BackendError {}
+
+/// Cut audio into pieces of at most `max` samples, each cut at the quietest
+/// moment in the last third of its window, so words aren't split.
+pub fn split_at_pauses(pcm: &[f32], max: usize) -> Vec<&[f32]> {
+    let window = SAMPLE_RATE / 10; // 100 ms
+    let mut pieces = Vec::new();
+    let mut rest = pcm;
+    while rest.len() > max {
+        let search_from = max * 2 / 3;
+        let mut best = max;
+        let mut best_energy = f32::MAX;
+        let mut at = search_from;
+        while at + window <= max {
+            let energy: f32 = rest[at..at + window].iter().map(|x| x * x).sum();
+            if energy < best_energy {
+                best_energy = energy;
+                best = at + window / 2;
+            }
+            at += window / 2;
+        }
+        let (head, tail) = rest.split_at(best);
+        pieces.push(head);
+        rest = tail;
+    }
+    if !rest.is_empty() {
+        pieces.push(rest);
+    }
+    pieces
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_audio_is_one_piece() {
+        let pcm = vec![0.1f32; SAMPLE_RATE * 10];
+        assert_eq!(split_at_pauses(&pcm, SAMPLE_RATE * 28).len(), 1);
+    }
+
+    #[test]
+    fn long_audio_cuts_at_the_pause() {
+        // 40 s of "speech" with a silent gap at 25 s.
+        let mut pcm = vec![0.3f32; SAMPLE_RATE * 40];
+        for x in &mut pcm[SAMPLE_RATE * 25..SAMPLE_RATE * 25 + SAMPLE_RATE / 2] {
+            *x = 0.0;
+        }
+        let pieces = split_at_pauses(&pcm, SAMPLE_RATE * 28);
+        assert_eq!(pieces.len(), 2);
+        let cut = pieces[0].len();
+        assert!(cut >= SAMPLE_RATE * 25 && cut <= SAMPLE_RATE * 25 + SAMPLE_RATE / 2, "cut at {cut}");
+        assert_eq!(pieces.iter().map(|p| p.len()).sum::<usize>(), pcm.len());
+    }
+}

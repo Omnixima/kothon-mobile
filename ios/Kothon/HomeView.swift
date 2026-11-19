@@ -195,11 +195,18 @@ struct TryItCard: View {
                     .padding(12)
                     .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             }
+            if !lastStats.isEmpty {
+                Text("শেষবার: \(lastStats)").font(.caption).foregroundStyle(.secondary)
+            }
             if let err = dictation.lastError {
                 Text(err).font(.caption).foregroundStyle(.red)
             }
         }
+        .onAppear { lastStats = KothonShared.defaults.string(forKey: SharedKey.stats) ?? "" }
+        .onChange(of: dictation.lastStats) { _, new in lastStats = new }
     }
+
+    @State private var lastStats = ""
 
     private var status: String {
         if !models.isInstalled(models.selected) { return "আগে একটা মডেল নামান" }

@@ -19,6 +19,8 @@ final class DictationService: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var level: Float = 0
     @Published private(set) var lastDuration: TimeInterval = 0
+    /// "৮.২ সে. কথা → ১.৪ সে.-এ লেখা (CPU)", to see how fast each model is.
+    @Published private(set) var lastStats = ""
 
     /// How long an unused session stays open. Wispr Flow uses 5 minutes too.
     var idleTimeout: TimeInterval = 5 * 60
@@ -151,12 +153,15 @@ final class DictationService: ObservableObject {
 
         Task {
             do {
+                let started = Date()
                 let engine = try await loadEngine(modelID: modelID)
                 let text = try await withCheckedThrowingContinuation { (cont: CheckedContinuation<String, Error>) in
                     engineQueue.async {
                         cont.resume(with: Result { try engine.transcribe(samples, settings: settings) })
                     }
                 }
+                lastStats = Self.stats(audio: lastDuration, took: Date().timeIntervalSince(started),
+                                       cpu: settings.cpuOnly)
                 deliver(text)
             } catch {
                 fail(error.localizedDescription)
@@ -171,9 +176,21 @@ final class DictationService: ObservableObject {
         setPhase(.ready)
     }
 
+    private static func stats(audio: TimeInterval, took: TimeInterval, cpu: Bool) -> String {
+        func bn(_ x: Double) -> String {
+            let f = NumberFormatter()
+            f.locale = Locale(identifier: "bn-BD")
+            f.maximumFractionDigits = 1
+            f.minimumFractionDigits = 1
+            return f.string(from: NSNumber(value: x)) ?? String(format: "%.1f", x)
+        }
+        return "\(bn(audio)) সে. কথা → \(bn(took)) সে.-এ লেখা (\(cpu ? "CPU" : "GPU"))"
+    }
+
     private func deliver(_ text: String) {
         lastResult = text
         shared.set(text, forKey: SharedKey.resultText)
+        shared.set(lastStats, forKey: SharedKey.stats)
         shared.set(shared.integer(forKey: SharedKey.resultID) + 1, forKey: SharedKey.resultID)
         DarwinCenter.shared.post(.changed)
     }
