@@ -181,10 +181,19 @@ final class ModelStore: ObservableObject {
             lastError = nil
             defer { progress[model.id] = nil }
             do {
-                let folder = try await NeuralEngineModels.download(
-                    repo: coreML.repo, variant: coreML.variant, into: dir
-                ) { [weak self] fraction in
-                    Task { @MainActor in self?.progress[model.id] = fraction }
+                // The Hub library keeps partial files and resumes them, so a
+                // retry continues where the dropped connection stopped.
+                let dir = self.dir
+                let folder = try await ResumableDownload.withRetries(retryAny: true) {
+                    try await NeuralEngineModels.download(
+                        repo: coreML.repo, variant: coreML.variant, into: dir
+                    ) { [weak self] fraction in
+                        Task { @MainActor in
+                            // Never jump back while a retry recounts.
+                            let now = self?.progress[model.id] ?? 0
+                            self?.progress[model.id] = max(now, fraction)
+                        }
+                    }
                 }
                 UserDefaults.standard.set(folder.path, forKey: "coreml.\(model.id)")
             } catch {
@@ -237,35 +246,14 @@ final class ModelStore: ObservableObject {
         defer { progress[id] = nil }
         do {
             for (index, (remote, local)) in items.enumerated() {
-                let (tmp, response) = try await URLSession.shared.download(
-                    from: remote,
-                    delegate: ProgressDelegate { [weak self] fraction in
-                        Task { @MainActor in
-                            self?.progress[id] = (Double(index) + fraction) / Double(items.count)
-                        }
-                    })
-                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                    throw EngineError(message: "ডাউনলোড ব্যর্থ (\((response as? HTTPURLResponse)?.statusCode ?? 0))")
+                try await ResumableDownload.fetch(remote, to: local) { [weak self] fraction in
+                    Task { @MainActor in
+                        self?.progress[id] = (Double(index) + fraction) / Double(items.count)
+                    }
                 }
-                try? FileManager.default.removeItem(at: local)
-                try FileManager.default.moveItem(at: tmp, to: local)
             }
         } catch {
             lastError = error.localizedDescription
         }
     }
-}
-
-private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate {
-    let onProgress: (Double) -> Void
-    init(_ onProgress: @escaping (Double) -> Void) { self.onProgress = onProgress }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                    didWriteData _: Int64, totalBytesWritten written: Int64,
-                    totalBytesExpectedToWrite total: Int64) {
-        if total > 0 { onProgress(Double(written) / Double(total)) }
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                    didFinishDownloadingTo location: URL) {}
 }
