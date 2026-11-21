@@ -38,9 +38,16 @@ struct KeyboardSetupView: View {
         // Read the system keyboard list fresh: UserDefaults caches it, so a
         // keyboard added in Settings wouldn't show until the app restarted.
         CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
-        let keyboards = CFPreferencesCopyAppValue("AppleKeyboards" as CFString, kCFPreferencesAnyApplication) as? [String] ?? []
+        let keyboards = (CFPreferencesCopyAppValue("AppleKeyboards" as CFString, kCFPreferencesAnyApplication) as? [String] ?? [])
+            + (UserDefaults.standard.array(forKey: "AppleKeyboards") as? [String] ?? [])
+        // The keyboards iOS has turned on right now; Kothon's is the bn-BD one.
+        let active = UITextInputMode.activeInputModes.contains { mode in
+            mode.primaryLanguage == "bn-BD"
+                || ((mode.value(forKey: "identifier") as? String)?.hasPrefix("com.kothon") ?? false)
+        }
+        KothonShared.defaults.synchronize()
         fullAccess = KothonShared.defaults.double(forKey: SharedKey.keyboardFullAccessSeen) > 0
-        added = fullAccess || keyboards.contains { $0.hasPrefix("com.kothon.dictation.ios.keyboard") }
+        added = fullAccess || active || keyboards.contains { $0.hasPrefix("com.kothon.dictation.ios.keyboard") }
     }
 
     // MARK: Checklist

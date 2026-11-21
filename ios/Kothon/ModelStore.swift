@@ -184,9 +184,41 @@ final class ModelStore: ObservableObject {
         return false
     }
 
+    /// Posted when a speech model lands on the phone; the dictation service
+    /// then gets it ready, so it goes straight to "তৈরি".
+    static let installedNotification = Notification.Name("ModelStore.installed")
+
+    /// A download that was started but hasn't finished (the app was closed
+    /// or the connection gave up): picked up again when the app comes back.
+    private static let pendingKey = "pendingDownload"
+
+    func resumePendingDownload() {
+        guard let id = UserDefaults.standard.string(forKey: Self.pendingKey),
+              let model = SpeechModel.all.first(where: { $0.id == id }) else { return }
+        if isInstalled(model) {
+            UserDefaults.standard.removeObject(forKey: Self.pendingKey)
+            return
+        }
+        guard progress[id] == nil else { return }
+        Task { await download(model) }
+    }
+
     func download(_ model: SpeechModel) async {
+        UserDefaults.standard.set(model.id, forKey: Self.pendingKey)
+        await downloadFiles(model)
+        guard isInstalled(model) else { return }
+        UserDefaults.standard.removeObject(forKey: Self.pendingKey)
+        // Use it if nothing usable was selected, or it was the one chosen.
+        if selectedID == model.id || !isInstalled(selected) { selectedID = model.id }
+        NotificationCenter.default.post(name: Self.installedNotification, object: model.id)
+    }
+
+    private func downloadFiles(_ model: SpeechModel) async {
         lastError = nil
-        guard hasRoom(forMB: model.sizeMB, coreML: model.isCoreML) else { return }
+        guard hasRoom(forMB: model.sizeMB, coreML: model.isCoreML) else {
+            UserDefaults.standard.removeObject(forKey: Self.pendingKey)  // no point retrying
+            return
+        }
         if let coreML = model.coreML {
             guard progress[model.id] == nil else { return }
             progress[model.id] = 0

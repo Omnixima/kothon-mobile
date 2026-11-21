@@ -59,6 +59,15 @@ final class DictationService: ObservableObject {
             guard let self else { return }
             if self.phase == .transcribing { self.cancelTranscription() } else { self.cancelRecording() }
         }
+        // A model just downloaded: get it ready now, no tap needed.
+        NotificationCenter.default.addObserver(
+            forName: ModelStore.installedNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.modelChanged()
+                self?.prepareEngineIfNeeded()
+            }
+        }
         // Background apps can't use the GPU: swap to the CPU copy of the
         // model as the app leaves the screen, while a session keeps it alive.
         NotificationCenter.default.addObserver(

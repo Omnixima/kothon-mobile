@@ -55,16 +55,9 @@ struct ModelSetupView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
-                    Button(action: start) {
-                        Text(choice.map { "\($0 == .fast ? "দ্রুত" : "নিখুঁত") ডাউনলোড করুন" } ?? "একটা মডেল বেছে নিন")
-                            .font(.bn(.headline, .semibold))
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .background(Brand.micGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(choice == nil || choice.flatMap(models.roomProblem) != nil)
-                    .opacity(choice != nil && choice.flatMap(models.roomProblem) == nil ? 1 : 0.5)
+                    Text("যেটা চান সেটাতে চাপুন, সঙ্গে সঙ্গে ডাউনলোড শুরু হবে।")
+                        .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
                     if showSkip {
                         Button("পরে করব", action: done)
                             .font(.bn(.subheadline, .medium))
@@ -86,7 +79,8 @@ struct ModelSetupView: View {
     private func card(_ m: SpeechModel) -> some View {
         let selected = choice == m
         let problem = models.roomProblem(m)
-        return Button { if problem == nil { choice = m } } label: {
+        // Choosing is downloading: one tap, no second button.
+        return Button { if problem == nil { choice = m; start(m) } } label: {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: selected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 22)).foregroundStyle(selected ? Brand.lilac : .white.opacity(0.4))
@@ -120,21 +114,14 @@ struct ModelSetupView: View {
 
     /// Start the downloads and move on; they continue while the app is open,
     /// and the model is selected and prepared as soon as it lands.
-    private func start() {
-        guard let m = choice else { return }
+    private func start(_ m: SpeechModel) {
         let withPunctuation = punctuation && !models.punctuationInstalled
         // With nothing on the phone yet, show this download on home. If it
         // fails, dictation falls back to any installed model
         // (ModelStore.usableModel), so this choice never blocks the keyboard.
         if !SpeechModel.all.contains(where: models.isInstalled) { models.selectedID = m.id }
-        Task {
-            await models.download(m)
-            if models.isInstalled(m) {
-                models.selectedID = m.id
-                dictation.modelChanged()
-                dictation.prepareEngineIfNeeded()
-            }
-        }
+        // Selected and made ready when it lands (ModelStore.download).
+        Task { await models.download(m) }
         if withPunctuation { Task { await models.downloadPunctuation() } }
         done()
     }
@@ -153,6 +140,7 @@ struct KeyboardSetupStep: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Wordmark(height: 30).padding(.top, 12)
+                    ModelDownloadCard()
                     KeyboardSetupView(showIntro: $showIntro, developerMode: $developerMode)
                 }
                 .padding(.horizontal, 24)
@@ -177,5 +165,70 @@ struct KeyboardSetupStep: View {
         .toolbar(.hidden, for: .navigationBar)
         }
         .fullScreenCover(isPresented: $showIntro) { IntroSlidesView { showIntro = false } }
+    }
+}
+
+/// On the keyboard step, right after choosing a model: its download and
+/// then "প্রস্তুত হচ্ছে… → তৈরি", so it's clear the model is on its way.
+struct ModelDownloadCard: View {
+    @EnvironmentObject var models: ModelStore
+    @EnvironmentObject var dictation: DictationService
+
+    /// The speech model being downloaded, else the selected one.
+    private var model: SpeechModel {
+        SpeechModel.all.first { models.progress[$0.id] != nil } ?? models.selected
+    }
+
+    private var name: String { model == .fast ? "দ্রুত" : "নিখুঁত" }
+
+    var body: some View {
+        let downloading = models.progress[model.id]
+        let installed = models.isInstalled(model)
+        if downloading != nil || installed || models.lastError != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    if installed, case .ready = dictation.engineStatus {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Brand.readyGreen)
+                    } else if downloading != nil || installed {
+                        ProgressView().tint(Brand.lilac)
+                    } else {
+                        Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Brand.softRed)
+                    }
+                    Text(title(downloading: downloading, installed: installed))
+                        .font(.bn(.headline, .semibold))
+                    Spacer(minLength: 0)
+                }
+                if let p = downloading {
+                    ProgressView(value: p).tint(Brand.violetLight)
+                }
+                Text(detail(downloading: downloading, installed: installed))
+                    .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+
+    private func title(downloading: Double?, installed: Bool) -> String {
+        if models.retrying.contains(model.id) { return "নেট চলে গেছে, আবার চেষ্টা করছে…" }
+        if let p = downloading { return "\(name) ডাউনলোড হচ্ছে… \(DictationService.bn(p * 100, digits: 0))%" }
+        if installed {
+            if case .ready = dictation.engineStatus { return "\(name) তৈরি" }
+            return "\(name) প্রস্তুত হচ্ছে…"
+        }
+        return "ডাউনলোড হয়নি"
+    }
+
+    private func detail(downloading: Double?, installed: Bool) -> String {
+        if downloading != nil {
+            return "\(DictationService.bn(Double(model.sizeMB), digits: 0)) MB। এর মধ্যে নিচের ধাপে কিবোর্ড চালু করে নিন। সেটিংসে গেলে ডাউনলোড একটু থামতে পারে, ফিরলে যেখানে ছিল সেখান থেকেই চলবে।"
+        }
+        if installed {
+            if case .ready = dictation.engineStatus { return "এখন যেকোনো অ্যাপে কথন কিবোর্ডে বলতে পারেন।" }
+            return "অপেক্ষা করতে হবে না, নিজে থেকেই তৈরি হয়ে যাবে।"
+        }
+        return models.lastError.map { "\($0)। পরে মডেল স্ক্রিন থেকে আবার ডাউনলোড করুন।" } ?? ""
     }
 }

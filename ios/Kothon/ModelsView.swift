@@ -141,14 +141,8 @@ struct ModelsView: View {
             ProgressRing(fraction: p)
         } else if !installed {
             Button("ডাউনলোড") {
-                Task {
-                    await models.download(m)
-                    if models.isInstalled(m) && !models.isInstalled(models.selected) {
-                        models.selectedID = m.id
-                        dictation.modelChanged()
-                        dictation.prepareEngineIfNeeded()
-                    }
-                }
+                // Selected and made ready when it lands (ModelStore.download).
+                Task { await models.download(m) }
             }
             .font(.bn(.subheadline, .semibold))
             .buttonStyle(.borderedProminent)

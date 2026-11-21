@@ -65,7 +65,7 @@ final class KeyboardViewController: UIInputViewController {
         model.showHitAreas = shared.bool(forKey: SharedKey.devHitAreas)
         // Tells the app's setup screen that the keyboard is added and has
         // Full Access (the App Group is only writable with Full Access).
-        if hasFullAccess { shared.set(Date().timeIntervalSince1970, forKey: SharedKey.keyboardFullAccessSeen) }
+        markFullAccess()
         model.needsGlobe = needsInputModeSwitchKey
         lastResultID = shared.integer(forKey: SharedKey.resultID)
         lastErrorID = shared.integer(forKey: SharedKey.errorID)
@@ -80,6 +80,16 @@ final class KeyboardViewController: UIInputViewController {
         refresh()
     }
 
+    /// Tells the app's setup checklist that the keyboard runs with Full
+    /// Access (the App Group is only writable then).
+    private func markFullAccess() {
+        model.hasFullAccess = hasFullAccess
+        guard hasFullAccess else { return }
+        shared.set(Date().timeIntervalSince1970, forKey: SharedKey.keyboardFullAccessSeen)
+        shared.synchronize()
+        DarwinCenter.shared.post(.changed)
+    }
+
     /// Ask iOS to let the keys have touches at the screen edges first.
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { [.left, .right, .bottom] }
 
@@ -90,6 +100,8 @@ final class KeyboardViewController: UIInputViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        // hasFullAccess can read false this early in viewWillAppear; mark again.
+        markFullAccess()
         setNeedsUpdateOfScreenEdgesDeferringSystemGestures()
         removeSystemTouchDelays()
     }

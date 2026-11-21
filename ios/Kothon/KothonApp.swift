@@ -74,6 +74,7 @@ struct KothonApp: App {
             }
             .onChange(of: scenePhase, initial: true) { _, phase in
                 // The keyboard hand-off loads the model itself (startRecording).
+                if phase == .active { models.resumePendingDownload() }
                 if phase == .active && !fromKeyboard { dictation.prepareEngineIfNeeded() }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
