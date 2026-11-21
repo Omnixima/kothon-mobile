@@ -87,6 +87,9 @@ final class KeyboardViewController: UIInputViewController {
         guard hasFullAccess else { return }
         shared.set(Date().timeIntervalSince1970, forKey: SharedKey.keyboardFullAccessSeen)
         shared.synchronize()
+        if let marker = KothonShared.fullAccessMarker {
+            try? Data("\(Date().timeIntervalSince1970)".utf8).write(to: marker, options: .atomic)
+        }
         DarwinCenter.shared.post(.changed)
     }
 

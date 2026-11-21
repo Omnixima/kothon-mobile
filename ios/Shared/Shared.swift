@@ -13,6 +13,14 @@ enum KothonShared {
 
     static let defaults = UserDefaults(suiteName: appGroup) ?? .standard
 
+    /// A file the keyboard touches when it runs with Full Access. The app
+    /// checks the file, not shared UserDefaults: the app's UserDefaults
+    /// keeps a cached copy and on device didn't see the keyboard's write.
+    static var fullAccessMarker: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)?
+            .appendingPathComponent("keyboard-full-access")
+    }
+
     /// A session counts as alive while the app's heartbeat is this fresh.
     static let heartbeatTimeout: TimeInterval = 4
 }

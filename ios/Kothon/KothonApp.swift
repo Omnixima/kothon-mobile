@@ -68,6 +68,8 @@ struct KothonApp: App {
             .preferredColorScheme(.dark)
             .onOpenURL { url in
                 guard url.scheme == "kothon", url.host == "dictate" else { return }
+                // The keyboard only opens the app with Full Access on: tick the checklist.
+                UserDefaults.standard.set(true, forKey: "keyboardHandOffSeen")
                 fromKeyboard = true
                 showLaunch = false
                 Task { await startFromKeyboard() }

@@ -7,6 +7,8 @@ struct KeyboardSetupView: View {
     @Binding var showIntro: Bool
     @Binding var developerMode: Bool
     @Environment(\.scenePhase) private var scenePhase
+    /// Set once the keyboard has opened the app to dictate (kothon://dictate).
+    @AppStorage("keyboardHandOffSeen") private var keyboardUsed = false
     @State private var added = false
     @State private var fullAccess = false
     @State private var tryText = ""
@@ -45,8 +47,12 @@ struct KeyboardSetupView: View {
             mode.primaryLanguage == "bn-BD"
                 || ((mode.value(forKey: "identifier") as? String)?.hasPrefix("com.kothon") ?? false)
         }
-        KothonShared.defaults.synchronize()
-        fullAccess = KothonShared.defaults.double(forKey: SharedKey.keyboardFullAccessSeen) > 0
+        CFPreferencesAppSynchronize(KothonShared.appGroup as CFString)
+        let markerSeen = KothonShared.fullAccessMarker.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
+        fullAccess = markerSeen
+            || KothonShared.defaults.double(forKey: SharedKey.keyboardFullAccessSeen) > 0
+            // The keyboard has opened the app to dictate: it only does that with Full Access.
+            || keyboardUsed
         added = fullAccess || active || keyboards.contains { $0.hasPrefix("com.kothon.dictation.ios.keyboard") }
     }
 
