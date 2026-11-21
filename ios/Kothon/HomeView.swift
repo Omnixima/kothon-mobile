@@ -193,7 +193,7 @@ struct HomeView: View {
             if let p = models.progress[models.selected.id] {
                 return "\(models.selected.label.components(separatedBy: " (").first ?? "") ডাউনলোড হচ্ছে… \(DictationService.bn(p * 100, digits: 0))% · \(DictationService.bn(Double(models.selected.sizeMB), digits: 0)) MB"
             }
-            return "শুরু করতে একটা মডেল ডাউনলোড করুন: মাইকে চাপুন"
+            return "শুরু করতে একটা মডেল ডাউনলোড করুন: কথন বোতামে চাপুন"
         }
         switch dictation.phase {
         case .recording: return "শুনছি… শেষ হলে আবার চাপুন"
@@ -222,7 +222,7 @@ struct HomeView: View {
             if let err = dictation.lastError {
                 Text(err).font(.bn(.subheadline)).foregroundStyle(Brand.softRed)
             } else if dictation.lastResult.isEmpty {
-                Text("এখনও কিছু লেখা হয়নি। মাইক চাপুন আর বলুন।")
+                Text("এখনও কিছু লেখা হয়নি। মাঝের কথন বোতামে চাপুন আর বলুন।")
                     .font(.bn(.subheadline)).foregroundStyle(.white.opacity(0.6))
             } else {
                 ScrollView {

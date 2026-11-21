@@ -142,12 +142,12 @@ struct KeyboardView: View {
                         Text("মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…")
                             .font(.bn(.subheadline, .semibold))
                             .foregroundStyle(.primary)
-                        Text(model.modelPreparing ? "প্রায় ২ মিনিট, একবারই লাগে। লেখা শেষে নিজেই আসবে।" : "কয়েক সেকেন্ড")
+                        Text(model.modelPreparing ? "প্রথমবার ১-২ মিনিট লাগতে পারে, পরের বার এত সময় লাগবে না।" : "কয়েক সেকেন্ড")
                             .font(.bn(.caption))
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    Text(status.isEmpty ? "মাইক চাপুন আর বলুন" : status)
+                    Text(status.isEmpty ? "চাপুন আর বাংলায় বলুন" : status)
                         .font(.bn(.footnote, .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)

@@ -162,7 +162,7 @@ final class KeyboardViewController: UIInputViewController {
                 guard let self, !opened else { return }
                 self.shared.set(false, forKey: SharedKey.startOnOpen)
                 self.awaitingResult = false
-                self.model.message = "কথন অ্যাপ খুলে মাইক চাপুন"
+                self.model.message = "কথন অ্যাপ খুলে মাঝের বোতামে চাপুন"
             }
         }
     }
