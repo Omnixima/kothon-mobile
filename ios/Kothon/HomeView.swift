@@ -198,7 +198,7 @@ struct HomeView: View {
         switch dictation.phase {
         case .recording: return "শুনছি… শেষ হলে আবার চাপুন"
         case .transcribing:
-            return loadingNote ? "মডেল প্রস্তুত হচ্ছে, হলেই লেখা আসবে" : "লিখছি… বাতিল করতে চাপুন"
+            return loadingNote ? "মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…" : "লিখছি… বাতিল করতে চাপুন"
         default:
             // E.g. the 10-minute safety stop on the Neural Engine compile.
             if case .failed(let message) = dictation.engineStatus { return message }
@@ -279,7 +279,7 @@ struct LoadingCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
                         ProgressView().tint(Brand.lilac)
-                        Text(dictation.preparingAfterUpdate ? "Neural Engine-এর জন্য প্রস্তুত হচ্ছে" : "মডেল প্রস্তুত হচ্ছে")
+                        Text("মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…")
                             .font(.bn(.headline, .semibold))
                         Spacer(minLength: 0)
                         if dictation.preparingAfterUpdate {
@@ -288,15 +288,12 @@ struct LoadingCard: View {
                                 .foregroundStyle(Brand.lilac)
                         }
                     }
-                    if !dictation.preparingAfterUpdate {
-                        Text("অপেক্ষা করতে হবে না: এর মধ্যেই মাইক চেপে বলুন, প্রস্তুত হলেই লেখা আসবে।")
-                            .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
-                    }
+
                     if dictation.preparingAfterUpdate {
                         // About 2 minutes; never claims to be done before it is.
                         ProgressView(value: min(elapsed / 120, 0.95))
                             .tint(Brand.violetLight)
-                        Text("প্রায় ২ মিনিট, একবারই লাগে। অ্যাপ খোলা রাখুন।")
+                        Text("প্রথমবার ১-২ মিনিট লাগতে পারে, পরের বার এত সময় লাগবে না।")
                             .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
                     }
                 }
@@ -330,14 +327,14 @@ struct ModelStatusPill: View {
                 switch dictation.engineStatus {
                 case .notLoaded:
                     Button { dictation.preloadEngine() } label: {
-                        pill { Circle().fill(.gray).frame(width: 8, height: 8); Text("\(shortLabel) · বললেই চালু হবে") }
+                        pill { Circle().fill(.gray).frame(width: 8, height: 8); Text(shortLabel) }
                     }
                     .accessibilityHint("চাপলে মডেল এখনই প্রস্তুত হবে")
                 case .loading(let since):
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         pill {
                             ProgressView().controlSize(.mini).tint(Brand.lilac)
-                            Text("প্রস্তুত হচ্ছে")
+                            Text("লোড হচ্ছে")
                         }
                     }
                 case .ready:

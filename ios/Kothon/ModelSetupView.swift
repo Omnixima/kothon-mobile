@@ -201,9 +201,12 @@ struct ModelDownloadCard: View {
                 if let p = downloading {
                     ProgressView(value: p).tint(Brand.violetLight)
                 }
-                Text(detail(downloading: downloading, installed: installed))
-                    .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
-                    .fixedSize(horizontal: false, vertical: true)
+                let note = detail(downloading: downloading, installed: installed)
+                if !note.isEmpty {
+                    Text(note)
+                        .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -215,8 +218,8 @@ struct ModelDownloadCard: View {
         if models.retrying.contains(model.id) { return "নেট চলে গেছে, আবার চেষ্টা করছে…" }
         if let p = downloading { return "\(name) ডাউনলোড হচ্ছে… \(DictationService.bn(p * 100, digits: 0))%" }
         if installed {
-            if case .ready = dictation.engineStatus { return "\(name) তৈরি" }
-            return "\(name) প্রস্তুত হচ্ছে…"
+            if case .ready = dictation.engineStatus { return "\(name) তৈরি ✓" }
+            return "মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…"
         }
         return "ডাউনলোড হয়নি"
     }
@@ -226,8 +229,8 @@ struct ModelDownloadCard: View {
             return "\(DictationService.bn(Double(model.sizeMB), digits: 0)) MB। এর মধ্যে নিচের ধাপে কিবোর্ড চালু করে নিন। সেটিংসে গেলে ডাউনলোড একটু থামতে পারে, ফিরলে যেখানে ছিল সেখান থেকেই চলবে।"
         }
         if installed {
-            if case .ready = dictation.engineStatus { return "এখন যেকোনো অ্যাপে কথন কিবোর্ডে বলতে পারেন।" }
-            return "অপেক্ষা করতে হবে না, নিজে থেকেই তৈরি হয়ে যাবে।"
+            if case .ready = dictation.engineStatus { return "" }
+            return model.isCoreML ? "প্রথমবার ১-২ মিনিট লাগতে পারে, পরের বার এত সময় লাগবে না।" : ""
         }
         return models.lastError.map { "\($0)। পরে মডেল স্ক্রিন থেকে আবার ডাউনলোড করুন।" } ?? ""
     }

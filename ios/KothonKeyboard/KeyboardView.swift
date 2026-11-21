@@ -139,7 +139,7 @@ struct KeyboardView: View {
                 if model.modelLoading && model.phase != .recording {
                     // The one-time Neural Engine prepare: say it plainly.
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("কথন প্রস্তুত হচ্ছে…")
+                        Text("মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…")
                             .font(.bn(.subheadline, .semibold))
                             .foregroundStyle(.primary)
                         Text(model.modelPreparing ? "প্রায় ২ মিনিট, একবারই লাগে। লেখা শেষে নিজেই আসবে।" : "কয়েক সেকেন্ড")
@@ -429,7 +429,7 @@ struct KeyboardView: View {
     private func bigMicTapped() {
         guard model.phase == .transcribing else { return onMic() }
         if model.modelLoading {
-            model.message = "কথন প্রস্তুত হচ্ছে, হলেই লেখা আসবে"
+            model.message = "মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…"
         } else {
             onCancel()
         }
@@ -441,8 +441,8 @@ struct KeyboardView: View {
             return "বলতে Settings-এ কথন → Allow Full Access চালু করুন"
         }
         if model.modelLoading, model.phase != .recording {
-            if model.modelPreparing { return "কথন প্রস্তুত হচ্ছে… একটু অপেক্ষা করুন" }
-            return "কথন প্রস্তুত হচ্ছে…"
+            if model.modelPreparing { return "মডেল লোড হচ্ছে, একটু অপেক্ষা করুন… প্রথমবার ১-২ মিনিট লাগতে পারে, পরের বার এত সময় লাগবে না।" }
+            return "মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…"
         }
         switch model.phase {
         case .off, .ready: return ""

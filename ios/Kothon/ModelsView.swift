@@ -242,13 +242,13 @@ private struct NowRunningCard: View {
         } else {
             switch dictation.engineStatus {
             case .ready:
-                label("তৈরি · এখন বলতে পারেন", Brand.readyGreen, dot: true)
+                label("তৈরি ✓", Brand.readyGreen, dot: true)
             case .loading(let since):
                 let _ = since
-                label("প্রস্তুত হচ্ছে… এর মধ্যেই বলতে পারেন", Brand.lilac, spinner: true)
+                label("মডেল লোড হচ্ছে, একটু অপেক্ষা করুন…", Brand.lilac, spinner: true)
             case .notLoaded:
                 Button { dictation.preloadEngine() } label: {
-                    label("ফোনে আছে · বললেই চালু হবে", .white.opacity(0.7), dot: true)
+                    label("ফোনে আছে", .white.opacity(0.7), dot: true)
                 }
                 .buttonStyle(.plain)
             case .failed(let msg):
