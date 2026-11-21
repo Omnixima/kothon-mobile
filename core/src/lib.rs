@@ -247,6 +247,9 @@ impl Engine {
 
 /// Numbers, fillers and English words: rule-based, no model needed.
 pub fn post_process_text(text: &str, options: &Options) -> String {
+    // One spelling for য় ড় ঢ় (see english::normalize), so the number,
+    // filler and English word lists match whichever form the model wrote.
+    let text = &english::normalize(text);
     let text = match options.digits {
         Some(style) => numbers::clean(text, style, options.remove_fillers),
         None => text.to_string(),

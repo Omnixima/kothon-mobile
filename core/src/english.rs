@@ -10,14 +10,31 @@ use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 
-static LEXICON: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
+static LEXICON: Lazy<HashMap<String, &'static str>> = Lazy::new(|| {
     include_str!("kothon_english.tsv")
         .lines()
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
         .filter_map(|l| l.split_once('\t'))
-        .map(|(bn, en)| (bn.trim(), en.trim()))
+        .map(|(bn, en)| (normalize(bn.trim()), en.trim()))
         .collect()
 });
+
+/// One spelling for য়, ড়, ঢ়: models write them either as one code point
+/// (U+09DF, U+09DC, U+09DD) or as the letter plus nukta. The iPhone's
+/// Whisper writes the single one, the word list the pair; compare both
+/// the same way.
+pub(crate) fn normalize(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 8);
+    for c in s.chars() {
+        match c {
+            '\u{09DF}' => out.push_str("\u{09AF}\u{09BC}"),
+            '\u{09DC}' => out.push_str("\u{09A1}\u{09BC}"),
+            '\u{09DD}' => out.push_str("\u{09A2}\u{09BC}"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
 
 /// Bengali endings that can follow an English word, as written after it.
 /// Longest first, so "য়ের" wins over "ের".
@@ -54,6 +71,8 @@ fn is_punct(c: char) -> bool {
 
 /// The English form of one Bengali-script word, ending included, if known.
 fn convert_word(word: &str) -> Option<String> {
+    let normalized = normalize(word);
+    let word = normalized.as_str();
     if let Some(en) = LEXICON.get(word) {
         return Some((*en).to_string());
     }
@@ -104,6 +123,12 @@ mod tests {
         );
         assert_eq!(english_words_in_english("অফিসের ফাইলটা"), "office-এর file-টা");
         assert_eq!(english_words_in_english("ইমেইলগুলো দেখো"), "email-গুলো দেখো");
+    }
+
+    #[test]
+    fn single_code_point_ya() {
+        // মিটিংয়ে with য় as U+09DF, as Whisper writes it on the iPhone.
+        assert_eq!(english_words_in_english("আমি মিটিং\u{09DF}ে আছি"), "আমি meeting-এ আছি");
     }
 
     #[test]
