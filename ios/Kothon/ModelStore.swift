@@ -111,6 +111,16 @@ final class ModelStore: ObservableObject {
                 return docs
             }
         }
+        // Where WhisperKit puts it, worked out from today's app folder. Never
+        // trust a saved full path alone: iOS can move the app's data folder
+        // on an update, and the saved path then points nowhere although the
+        // files are still here (the model looked "not downloaded").
+        if let core = model.coreML {
+            let folder = dir.appendingPathComponent("models/\(core.repo)/\(core.variant)", isDirectory: true)
+            if FileManager.default.fileExists(atPath: folder.appendingPathComponent("TextDecoder.mlmodelc").path) {
+                return folder
+            }
+        }
         guard let path = UserDefaults.standard.string(forKey: "coreml.\(model.id)"),
               FileManager.default.fileExists(atPath: path) else { return nil }
         return URL(fileURLWithPath: path)
@@ -269,6 +279,7 @@ final class ModelStore: ObservableObject {
         let fm = FileManager.default
         if let variant = model.coreML?.variant {
             // The copy WhisperKit downloaded, and a test copy in Documents.
+            if let folder = coreMLFolder(for: model) { try? fm.removeItem(at: folder) }
             if let path = UserDefaults.standard.string(forKey: "coreml.\(model.id)") {
                 try? fm.removeItem(atPath: path)
                 UserDefaults.standard.removeObject(forKey: "coreml.\(model.id)")
