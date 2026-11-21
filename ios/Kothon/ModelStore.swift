@@ -62,6 +62,8 @@ final class ModelStore: ObservableObject {
 
     @Published private(set) var progress: [String: Double] = [:]
     @Published private(set) var lastError: String?
+    /// Downloads waiting to try again after a dropped connection.
+    @Published private(set) var retrying: Set<String> = []
     @Published var selectedID: String {
         didSet { UserDefaults.standard.set(selectedID, forKey: "selectedModel") }
     }
@@ -81,6 +83,16 @@ final class ModelStore: ObservableObject {
     }
 
     var selected: SpeechModel { SpeechModel.all.first { $0.id == selectedID } ?? .fast }
+
+    /// The model to run: the selected one, or, if it isn't on the phone (say
+    /// its download never finished), one that is. Switches the selection to it.
+    func usableModel() -> SpeechModel? {
+        if isInstalled(selected) { return selected }
+        let fallback = [Self.accurateForThisPhone, .accurateNeuralEngine, .accurate, .fast]
+            .first { isInstalled($0) && !($0.isCoreML && Self.olderChip) }
+        if let fallback { selectedID = fallback.id }
+        return fallback
+    }
 
     func file(for model: SpeechModel) -> URL { dir.appendingPathComponent(model.filename) }
     func isInstalled(_ model: SpeechModel) -> Bool {
@@ -179,12 +191,14 @@ final class ModelStore: ObservableObject {
             guard progress[model.id] == nil else { return }
             progress[model.id] = 0
             lastError = nil
-            defer { progress[model.id] = nil }
+            defer { progress[model.id] = nil; retrying.remove(model.id) }
             do {
                 // The Hub library keeps partial files and resumes them, so a
                 // retry continues where the dropped connection stopped.
                 let dir = self.dir
-                let folder = try await ResumableDownload.withRetries(retryAny: true) {
+                let folder = try await ResumableDownload.withRetries(retryAny: true, onRetry: { [weak self] waiting in
+                    Task { @MainActor in self?.setRetrying(model.id, waiting) }
+                }) {
                     try await NeuralEngineModels.download(
                         repo: coreML.repo, variant: coreML.variant, into: dir
                     ) { [weak self] fraction in
@@ -239,15 +253,22 @@ final class ModelStore: ObservableObject {
         objectWillChange.send()
     }
 
+    private func setRetrying(_ id: String, _ waiting: Bool) {
+        if waiting { retrying.insert(id) } else { retrying.remove(id) }
+    }
+
     private func fetch(id: String, items: [(URL, URL)]) async {
         guard progress[id] == nil else { return }
         progress[id] = 0
         lastError = nil
-        defer { progress[id] = nil }
+        defer { progress[id] = nil; retrying.remove(id) }
         do {
             for (index, (remote, local)) in items.enumerated() {
-                try await ResumableDownload.fetch(remote, to: local) { [weak self] fraction in
+                try await ResumableDownload.fetch(remote, to: local, onRetry: { [weak self] waiting in
+                    Task { @MainActor in self?.setRetrying(id, waiting) }
+                }) { [weak self] fraction in
                     Task { @MainActor in
+                        self?.setRetrying(id, false)
                         self?.progress[id] = (Double(index) + fraction) / Double(items.count)
                     }
                 }

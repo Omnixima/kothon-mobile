@@ -162,7 +162,8 @@ final class DictationService: ObservableObject {
         setPhase(.transcribing)
         var settings = DictationSettings.current
         settings.cpuOnly = UIApplication.shared.applicationState != .active
-        let modelID = ModelStore.shared.selectedID
+        // The selected model, or an installed one if it isn't on the phone.
+        let modelID = ModelStore.shared.usableModel()?.id ?? ModelStore.shared.selectedID
 
         lastSamples = samples
         if Self.developerMode {
@@ -182,6 +183,7 @@ final class DictationService: ObservableObject {
                     // Nothing was said: type nothing.
                     lastStats = ""
                     shared.set("কিছু শোনা যায়নি", forKey: SharedKey.errorText)
+                    shared.set(shared.integer(forKey: SharedKey.errorID) + 1, forKey: SharedKey.errorID)
                     DarwinCenter.shared.post(.changed)
                     if phase == .transcribing { setPhase(.ready) }
                     return
@@ -373,6 +375,7 @@ final class DictationService: ObservableObject {
         let message = detail.hasPrefix("আগে") ? detail : "লিখতে পারিনি (\(detail))"
         lastError = message
         shared.set(message, forKey: SharedKey.errorText)
+        shared.set(shared.integer(forKey: SharedKey.errorID) + 1, forKey: SharedKey.errorID)
         if phase == .recording || phase == .transcribing { setPhase(audioEngine.isRunning ? .ready : .off) }
         DarwinCenter.shared.post(.changed)
     }
@@ -389,7 +392,7 @@ final class DictationService: ObservableObject {
     /// Load the model as the session opens, so the first dictation doesn't wait.
     /// Also the home screen's "লোড করুন".
     func preloadEngine() {
-        let id = ModelStore.shared.selectedID
+        let id = ModelStore.shared.usableModel()?.id ?? ModelStore.shared.selectedID
         Task { _ = try? await loadEngine(modelID: id) }
     }
 
@@ -407,8 +410,13 @@ final class DictationService: ObservableObject {
     /// cut off, the next launch tries again.
     func prepareEngineIfNeeded() {
         let store = ModelStore.shared
-        let model = store.selected
-        guard model.isCoreML, store.isInstalled(model), engine == nil, loading == nil else { return }
+        // Every model, not just নিখুঁত: nobody should have to tap "load".
+        guard let model = store.usableModel(), engine == nil || engineModelID != model.id,
+              loading == nil else { return }
+        guard model.isCoreML else {
+            Task { _ = try? await loadEngine(modelID: model.id) }
+            return
+        }
         let firstAfterUpdate = UserDefaults.standard.string(forKey: Self.preparedBuildKey) != Self.buildID
         preparingAfterUpdate = firstAfterUpdate
         shared.set(firstAfterUpdate, forKey: SharedKey.modelPreparing)
@@ -484,6 +492,9 @@ final class DictationService: ObservableObject {
     private func load(modelID: String) async throws -> Transcriber {
         let store = ModelStore.shared
         guard let model = SpeechModel.all.first(where: { $0.id == modelID }), store.isInstalled(model) else {
+            if !store.progress.isEmpty {
+                throw EngineError(message: "আগে মডেলটা ডাউনলোড হোক, কথন অ্যাপে দেখা যাচ্ছে কতটা হলো")
+            }
             throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
         }
         if model.isCoreML {

@@ -35,6 +35,9 @@ enum SharedKey {
     /// Bumped with every new result, so the keyboard inserts each one once.
     static let resultID = "resultID"
     static let errorText = "errorText"
+    /// Bumped with every new error, so the keyboard shows only errors from
+    /// the dictation it just asked for, never a leftover one.
+    static let errorID = "errorID"
     /// The keyboard sets this before opening the app: start recording right away.
     static let startOnOpen = "startOnOpen"
     /// When the keyboard last ran with Full Access (for the setup checklist).

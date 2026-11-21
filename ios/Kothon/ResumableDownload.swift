@@ -14,9 +14,10 @@ enum ResumableDownload {
     /// `onProgress` gets the fraction of the whole file, including bytes from
     /// earlier attempts.
     static func fetch(_ remote: URL, to local: URL,
+                      onRetry: @escaping (Bool) -> Void = { _ in },
                       onProgress: @escaping @Sendable (Double) -> Void) async throws {
         let part = local.appendingPathExtension("part")
-        try await withRetries {
+        try await withRetries(onRetry: onRetry) {
             try await Attempt(remote: remote, part: part, onProgress: onProgress).run()
         }
         try? FileManager.default.removeItem(at: local)
@@ -27,7 +28,10 @@ enum ResumableDownload {
     /// waiting 2, 4, 8, 16, 30 s in between. Other errors fail at once.
     /// `retryAny` retries every error but cancellation (for libraries whose
     /// errors don't say whether the network was at fault).
-    static func withRetries<T>(retryAny: Bool = false, _ body: () async throws -> T) async throws -> T {
+    /// `onRetry(true)` while waiting to try again, `onRetry(false)` when the
+    /// next try starts.
+    static func withRetries<T>(retryAny: Bool = false, onRetry: (Bool) -> Void = { _ in },
+                               _ body: () async throws -> T) async throws -> T {
         try await keepingAppAwake {
             var attempt = 1
             while true {
@@ -37,7 +41,9 @@ enum ResumableDownload {
                     let retry = retryAny ? !(error is CancellationError) : isTransient(error)
                     guard attempt < attempts, retry, !Task.isCancelled else { throw error }
                     let wait = min(30, 1 << attempt)
+                    onRetry(true)
                     try await Task.sleep(nanoseconds: UInt64(wait) * 1_000_000_000)
+                    onRetry(false)
                     attempt += 1
                 }
             }

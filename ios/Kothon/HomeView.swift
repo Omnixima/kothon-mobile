@@ -187,6 +187,9 @@ struct HomeView: View {
 
     private var statusLine: String {
         if !installed {
+            if models.retrying.contains(models.selected.id) {
+                return "নেট চলে গেছে, ডাউনলোড আবার চেষ্টা করছে…"
+            }
             if let p = models.progress[models.selected.id] {
                 return "\(models.selected.label.components(separatedBy: " (").first ?? "") ডাউনলোড হচ্ছে… \(DictationService.bn(p * 100, digits: 0))% · \(DictationService.bn(Double(models.selected.sizeMB), digits: 0)) MB"
             }
@@ -195,7 +198,7 @@ struct HomeView: View {
         switch dictation.phase {
         case .recording: return "শুনছি… শেষ হলে আবার চাপুন"
         case .transcribing:
-            return loadingNote ? "মডেল লোড পেছনে চলছে, শেষ হলে লেখা আসবে" : "লিখছি… বাতিল করতে চাপুন"
+            return loadingNote ? "মডেল প্রস্তুত হচ্ছে, হলেই লেখা আসবে" : "লিখছি… বাতিল করতে চাপুন"
         default:
             // E.g. the 10-minute safety stop on the Neural Engine compile.
             if case .failed(let message) = dictation.engineStatus { return message }
@@ -276,12 +279,18 @@ struct LoadingCard: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 10) {
                         ProgressView().tint(Brand.lilac)
-                        Text(dictation.preparingAfterUpdate ? "Neural Engine-এর জন্য প্রস্তুত হচ্ছে" : "মডেল লোড হচ্ছে")
+                        Text(dictation.preparingAfterUpdate ? "Neural Engine-এর জন্য প্রস্তুত হচ্ছে" : "মডেল প্রস্তুত হচ্ছে")
                             .font(.bn(.headline, .semibold))
                         Spacer(minLength: 0)
-                        Text("\(DictationService.bn(elapsed, digits: 0)) সে.")
-                            .font(.bn(.subheadline, .medium)).monospacedDigit()
-                            .foregroundStyle(Brand.lilac)
+                        if dictation.preparingAfterUpdate {
+                            Text("\(DictationService.bn(elapsed, digits: 0)) সে.")
+                                .font(.bn(.subheadline, .medium)).monospacedDigit()
+                                .foregroundStyle(Brand.lilac)
+                        }
+                    }
+                    if !dictation.preparingAfterUpdate {
+                        Text("অপেক্ষা করতে হবে না: এর মধ্যেই মাইক চেপে বলুন, প্রস্তুত হলেই লেখা আসবে।")
+                            .font(.bn(.footnote)).foregroundStyle(.white.opacity(0.7))
                     }
                     if dictation.preparingAfterUpdate {
                         // About 2 minutes; never claims to be done before it is.
@@ -321,14 +330,14 @@ struct ModelStatusPill: View {
                 switch dictation.engineStatus {
                 case .notLoaded:
                     Button { dictation.preloadEngine() } label: {
-                        pill { Circle().fill(.gray).frame(width: 8, height: 8); Text("লোড হয়নি") }
+                        pill { Circle().fill(.gray).frame(width: 8, height: 8); Text("\(shortLabel) · বললেই চালু হবে") }
                     }
-                    .accessibilityHint("চাপলে মডেল লোড হবে")
+                    .accessibilityHint("চাপলে মডেল এখনই প্রস্তুত হবে")
                 case .loading(let since):
                     TimelineView(.periodic(from: since, by: 1)) { context in
                         pill {
                             ProgressView().controlSize(.mini).tint(Brand.lilac)
-                            Text(dictation.preparingAfterUpdate ? "প্রস্তুত হচ্ছে" : "লোড হচ্ছে")
+                            Text("প্রস্তুত হচ্ছে")
                         }
                     }
                 case .ready:
@@ -337,7 +346,7 @@ struct ModelStatusPill: View {
                     }
                 case .failed:
                     Button { dictation.preloadEngine() } label: {
-                        pill { Circle().fill(Brand.softRed).frame(width: 8, height: 8); Text("লোড হয়নি · আবার") }
+                        pill { Circle().fill(Brand.softRed).frame(width: 8, height: 8); Text("চালু হয়নি · আবার") }
                     }
                     .foregroundStyle(Brand.softRed)
                 }

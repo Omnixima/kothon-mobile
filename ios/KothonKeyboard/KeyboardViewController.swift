@@ -29,6 +29,9 @@ final class KeyboardViewController: UIInputViewController {
     /// True between our start signal and the result, so a result made by
     /// dictating inside the app isn't typed into this text field.
     private var awaitingResult = false
+    /// The error count when this dictation was asked for: only a newer
+    /// error belongs to it.
+    private var lastErrorID = 0
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -65,10 +68,13 @@ final class KeyboardViewController: UIInputViewController {
         if hasFullAccess { shared.set(Date().timeIntervalSince1970, forKey: SharedKey.keyboardFullAccessSeen) }
         model.needsGlobe = needsInputModeSwitchKey
         lastResultID = shared.integer(forKey: SharedKey.resultID)
+        lastErrorID = shared.integer(forKey: SharedKey.errorID)
         // Coming back from the app after it started recording for us.
         if shared.bool(forKey: SharedKey.startOnOpen) {
             shared.set(false, forKey: SharedKey.startOnOpen)
             awaitingResult = true
+            // Errors since the mic tap that opened the app belong to it.
+            lastErrorID = shared.integer(forKey: "startErrorID")
         }
         DarwinCenter.shared.observe(.changed) { [weak self] in self?.refresh() }
         refresh()
@@ -125,6 +131,7 @@ final class KeyboardViewController: UIInputViewController {
         case (true, .ready):
             awaitingResult = true
             lastResultID = shared.integer(forKey: SharedKey.resultID)
+            lastErrorID = shared.integer(forKey: SharedKey.errorID)
             DarwinCenter.shared.post(.start)
             model.phase = .recording
         case (true, .transcribing):
@@ -132,8 +139,10 @@ final class KeyboardViewController: UIInputViewController {
         default:
             // No session: open the app, which starts one and begins recording.
             shared.set(true, forKey: SharedKey.startOnOpen)
+            shared.set(shared.integer(forKey: SharedKey.errorID), forKey: "startErrorID")
             awaitingResult = true
             lastResultID = shared.integer(forKey: SharedKey.resultID)
+            lastErrorID = shared.integer(forKey: SharedKey.errorID)
             openApp(KothonShared.dictateURL) { [weak self] opened in
                 guard let self, !opened else { return }
                 self.shared.set(false, forKey: SharedKey.startOnOpen)
@@ -164,9 +173,13 @@ final class KeyboardViewController: UIInputViewController {
             }
             awaitingResult = false
         }
-        if awaitingResult, let err = shared.string(forKey: SharedKey.errorText), model.phase != .recording {
-            model.message = err
-            awaitingResult = false
+        let errorID = shared.integer(forKey: SharedKey.errorID)
+        if errorID != lastErrorID {
+            lastErrorID = errorID
+            if awaitingResult, let err = shared.string(forKey: SharedKey.errorText), model.phase != .recording {
+                model.message = err
+                awaitingResult = false
+            }
         }
     }
 

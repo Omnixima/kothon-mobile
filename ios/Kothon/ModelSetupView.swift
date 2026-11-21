@@ -3,7 +3,7 @@
 
 import SwiftUI
 
-/// "একটা মডেল বেছে নিন": two cards (নিখুঁত recommended, দ্রুত), free space,
+/// "একটা মডেল বেছে নিন": two cards (দ্রুত, নিখুঁত), none chosen up front, free space,
 /// optional punctuation, one "ডাউনলোড" button. The download carries on while
 /// the user moves on; home shows its progress.
 struct ModelSetupView: View {
@@ -15,12 +15,11 @@ struct ModelSetupView: View {
     /// The plum at the bottom of the backdrop, behind the bottom buttons.
     static let barColor = Color(red: 0x1A / 255, green: 0x08 / 255, blue: 0x26 / 255)
 
-    @State private var choice = ModelStore.recommended
+    /// Nothing is chosen for the user: they pick, then download.
+    @State private var choice: SpeechModel?
     @State private var punctuation = true
-    /// The recommendation first.
-    private let options: [SpeechModel] = ModelStore.olderChip
-        ? [.fast, ModelStore.accurateForThisPhone]
-        : [ModelStore.accurateForThisPhone, .fast]
+    /// Smaller first.
+    private let options: [SpeechModel] = [.fast, ModelStore.accurateForThisPhone]
 
     var body: some View {
         ZStack {
@@ -57,15 +56,15 @@ struct ModelSetupView: View {
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 10) {
                     Button(action: start) {
-                        Text("ডাউনলোড")
+                        Text(choice.map { "\($0 == .fast ? "দ্রুত" : "নিখুঁত") ডাউনলোড করুন" } ?? "একটা মডেল বেছে নিন")
                             .font(.bn(.headline, .semibold))
                             .frame(maxWidth: .infinity, minHeight: 54)
                             .background(Brand.micGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                             .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
-                    .disabled(models.roomProblem(choice) != nil)
-                    .opacity(models.roomProblem(choice) == nil ? 1 : 0.5)
+                    .disabled(choice == nil || choice.flatMap(models.roomProblem) != nil)
+                    .opacity(choice != nil && choice.flatMap(models.roomProblem) == nil ? 1 : 0.5)
                     if showSkip {
                         Button("পরে করব", action: done)
                             .font(.bn(.subheadline, .medium))
@@ -81,10 +80,7 @@ struct ModelSetupView: View {
             }
         }
         .foregroundStyle(.white)
-        .onAppear {
-            // If the recommended model won't fit, start on the smaller one.
-            if models.roomProblem(choice) != nil, models.roomProblem(.fast) == nil { choice = .fast }
-        }
+        
     }
 
     private func card(_ m: SpeechModel) -> some View {
@@ -97,18 +93,15 @@ struct ModelSetupView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 8) {
                         Text(m == .fast ? "দ্রুত" : "নিখুঁত").font(.bn(.title3, .bold))
-                        if m == ModelStore.recommended {
-                            Text("প্রস্তাবিত").font(.bn(.caption, .semibold))
-                                .padding(.horizontal, 8).padding(.vertical, 2)
-                                .background(Brand.violet, in: Capsule())
-                        }
                     }
                     Text(m == .fast
-                         ? "ছোট, তাড়াতাড়ি ডাউনলোড হয় · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB"
+                         ? "ছোট, কয়েক মিনিটেই নেমে যায়। মাঝে মাঝে বানান ভুল হতে পারে।"
                          : ModelStore.olderChip
-                            ? "সবচেয়ে কম ভুল, তবে এই ফোনে কিবোর্ড থেকে ধীর · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB"
-                            : "সবচেয়ে কম ভুল, কিবোর্ড থেকেও দ্রুত · \(DictationService.bn(Double(m.sizeMB), digits: 0)) MB")
+                            ? "সবচেয়ে কম ভুল, তবে বড়। এই ফোনে কিবোর্ড থেকে একটু ধীর।"
+                            : "সবচেয়ে কম ভুল, তবে বড়। ভালো ওয়াইফাইতে নামানো ভালো।")
                         .font(.bn(.subheadline)).foregroundStyle(.white.opacity(0.75))
+                    Text("\(DictationService.bn(Double(m.sizeMB), digits: 0)) MB")
+                        .font(.bn(.caption, .semibold)).foregroundStyle(.white.opacity(0.55))
                     if let problem {
                         Text(problem).font(.bn(.caption, .medium)).foregroundStyle(Brand.softRed)
                     }
@@ -128,9 +121,12 @@ struct ModelSetupView: View {
     /// Start the downloads and move on; they continue while the app is open,
     /// and the model is selected and prepared as soon as it lands.
     private func start() {
-        let m = choice
+        guard let m = choice else { return }
         let withPunctuation = punctuation && !models.punctuationInstalled
-        models.selectedID = m.id
+        // With nothing on the phone yet, show this download on home. If it
+        // fails, dictation falls back to any installed model
+        // (ModelStore.usableModel), so this choice never blocks the keyboard.
+        if !SpeechModel.all.contains(where: models.isInstalled) { models.selectedID = m.id }
         Task {
             await models.download(m)
             if models.isInstalled(m) {

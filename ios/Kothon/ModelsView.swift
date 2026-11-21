@@ -135,7 +135,9 @@ struct ModelsView: View {
 
     @ViewBuilder
     private func trailing(_ m: SpeechModel, installed: Bool, selected: Bool) -> some View {
-        if let p = models.progress[m.id] {
+        if models.retrying.contains(m.id) {
+            Text("আবার চেষ্টা…").font(.bn(.caption, .medium)).foregroundStyle(Brand.lilac)
+        } else if let p = models.progress[m.id] {
             ProgressRing(fraction: p)
         } else if !installed {
             Button("ডাউনলোড") {
@@ -237,27 +239,27 @@ private struct NowRunningCard: View {
     }
 
     @ViewBuilder private var state: some View {
-        if let p = models.progress[models.selected.id] {
+        if models.retrying.contains(models.selected.id) {
+            label("নেট চলে গেছে, আবার চেষ্টা করছে…", Brand.lilac, spinner: true)
+        } else if let p = models.progress[models.selected.id] {
             label("ডাউনলোড হচ্ছে… \(DictationService.bn(p * 100, digits: 0))%", Brand.lilac, spinner: true)
         } else if !models.isInstalled(models.selected) {
             label("নিচ থেকে একটা মডেল ডাউনলোড করুন", .white.opacity(0.6))
         } else {
             switch dictation.engineStatus {
             case .ready:
-                label("তৈরি", Brand.readyGreen, dot: true)
+                label("তৈরি · এখন বলতে পারেন", Brand.readyGreen, dot: true)
             case .loading(let since):
-                TimelineView(.periodic(from: since, by: 1)) { ctx in
-                    label("\(dictation.preparingAfterUpdate ? "প্রস্তুত হচ্ছে" : "লোড হচ্ছে")… \(DictationService.bn(ctx.date.timeIntervalSince(since), digits: 0)) সে.",
-                          Brand.lilac, spinner: true)
-                }
+                let _ = since
+                label("প্রস্তুত হচ্ছে… এর মধ্যেই বলতে পারেন", Brand.lilac, spinner: true)
             case .notLoaded:
                 Button { dictation.preloadEngine() } label: {
-                    label("লোড হয়নি · চাপুন", .white.opacity(0.7), dot: true)
+                    label("ফোনে আছে · বললেই চালু হবে", .white.opacity(0.7), dot: true)
                 }
                 .buttonStyle(.plain)
             case .failed(let msg):
                 Button { dictation.preloadEngine() } label: {
-                    label("লোড হয়নি: \(msg) · আবার চেষ্টা", Brand.softRed, dot: true)
+                    label("চালু করা যায়নি: \(msg) · আবার চেষ্টা করুন", Brand.softRed, dot: true)
                 }
                 .buttonStyle(.plain)
             }

@@ -84,6 +84,8 @@ struct KothonApp: App {
 
     private func startFromKeyboard() async {
         guard await Self.microphoneAllowed() else { return }
+        // Get the model ready while the person speaks.
+        dictation.prepareEngineIfNeeded()
         dictation.startRecording()
     }
 

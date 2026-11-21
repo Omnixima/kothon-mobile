@@ -9,6 +9,11 @@ struct KeyboardSetupView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var added = false
     @State private var fullAccess = false
+    @State private var tryText = ""
+    @FocusState private var tryFocused: Bool
+    /// Re-check every second while this screen shows: Settings changes and the
+    /// keyboard's "I ran" mark arrive without telling the app.
+    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private var allDone: Bool { added && fullAccess }
 
@@ -24,12 +29,16 @@ struct KeyboardSetupView: View {
         }
         .onAppear(perform: refresh)
         .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
+        .onReceive(tick) { _ in if !allDone { refresh() } }
     }
 
     /// Settings → Keyboards lists Kothon once it's added; the keyboard marks
     /// the App Group when it runs with Full Access (only possible then).
     private func refresh() {
-        let keyboards = UserDefaults.standard.array(forKey: "AppleKeyboards") as? [String] ?? []
+        // Read the system keyboard list fresh: UserDefaults caches it, so a
+        // keyboard added in Settings wouldn't show until the app restarted.
+        CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
+        let keyboards = CFPreferencesCopyAppValue("AppleKeyboards" as CFString, kCFPreferencesAnyApplication) as? [String] ?? []
         fullAccess = KothonShared.defaults.double(forKey: SharedKey.keyboardFullAccessSeen) > 0
         added = fullAccess || keyboards.contains { $0.hasPrefix("com.kothon.dictation.ios.keyboard") }
     }
@@ -53,14 +62,32 @@ struct KeyboardSetupView: View {
                 step(1, done: added, "কিবোর্ড যোগ করুন",
                      "Settings → General → Keyboard → Keyboards → Add New Keyboard → কথন")
                 step(2, done: fullAccess, "Full Access চালু করুন",
-                     "লেখা কিবোর্ডে আনতে লাগে, কিছুই ইন্টারনেটে যায় না")
-                step(3, done: fullAccess, "যেকোনো অ্যাপে 🌐 চেপে কথন বেছে নিন",
-                     "তারপর বেগুনি \"কথন-এ বলুন\" চাপুন")
+                     "Settings → General → Keyboard → Keyboards → কথন → Allow Full Access। লেখা কিবোর্ডে আনতে লাগে, কিছুই ইন্টারনেটে যায় না।")
+                step(3, done: fullAccess, "কিবোর্ড একবার খুলে দেখুন",
+                     fullAccess
+                        ? "কথন কিবোর্ড ঠিকমতো চলছে। যেকোনো অ্যাপে 🌐 চেপে কথন বেছে নিন।"
+                        : "নিচের বক্সে চাপুন, তারপর 🌐 চেপে কথন বেছে নিন। Full Access চালু থাকলে এখানে ✓ আসবে।")
+                if added && !fullAccess { tryBox }
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    /// A text field to bring up the keyboard right here. When Kothon's
+    /// keyboard opens with Full Access it marks the App Group, and step 2
+    /// and 3 tick within a second.
+    private var tryBox: some View {
+        TextField("", text: $tryText, prompt: Text("এখানে চাপুন, তারপর 🌐").foregroundStyle(.white.opacity(0.45)))
+            .font(.bn(.body))
+            .focused($tryFocused)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Brand.lilac.opacity(0.4)))
+            .padding(.leading, 40)
+            .onChange(of: fullAccess) { _, on in if on { tryFocused = false } }
     }
 
     private func step(_ n: Int, done: Bool, _ title: String, _ detail: String) -> some View {
