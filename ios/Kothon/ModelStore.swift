@@ -258,6 +258,10 @@ final class ModelStore: ObservableObject {
             (URL(string: "\(PunctuationModel.base)/\($0)")!, punctuationDir.appendingPathComponent($0))
         }
         await fetch(id: PunctuationModel.dirName, items: items)
+        // Reload the speech model so it picks up punctuation now.
+        if punctuationInstalled {
+            NotificationCenter.default.post(name: Self.installedNotification, object: PunctuationModel.dirName)
+        }
     }
 
     /// Remove a downloaded model to free space. It can be downloaded again.

@@ -515,7 +515,9 @@ final class DictationService: ObservableObject {
             guard let folder = store.coreMLFolder(for: model) else {
                 throw EngineError(message: "আগে কথন অ্যাপে মডেল ডাউনলোড করুন")
             }
-            let loaded = try await NeuralEngineEngine(model: model, folder: folder)
+            let loaded = try await NeuralEngineEngine(
+                model: model, folder: folder,
+                punctuationDir: store.punctuationInstalled ? store.punctuationDir : nil)
             _ = try? await run(loaded, [Float](repeating: 0, count: 16_000), DictationSettings())
             engine = loaded
             engineModelID = modelID

@@ -227,3 +227,52 @@ pub unsafe extern "C" fn kothon_vad_free(vad: *mut Vad) {
         drop(Box::from_raw(vad));
     }
 }
+
+/// The punctuation model on its own, for speech models that don't run
+/// through `Engine` (the Core ML one on the Neural Engine).
+#[cfg(feature = "punct")]
+pub struct KothonPunct(crate::punct::Punctuator);
+
+/// Load the punctuation model from `dir`. NULL on failure, with *err_out set.
+#[cfg(feature = "punct")]
+#[no_mangle]
+pub unsafe extern "C" fn kothon_punct_new(dir: *const c_char, err_out: *mut *mut c_char) -> *mut KothonPunct {
+    let Some(dir) = path_arg(dir) else { return ptr::null_mut() };
+    match std::panic::catch_unwind(|| crate::punct::Punctuator::load(dir)) {
+        Ok(Ok(p)) => Box::into_raw(Box::new(KothonPunct(p))),
+        Ok(Err(e)) => {
+            if !err_out.is_null() { *err_out = to_c(format!("{e:#}")); }
+            ptr::null_mut()
+        }
+        Err(_) => {
+            if !err_out.is_null() { *err_out = to_c("punctuation model panicked".to_string()); }
+            ptr::null_mut()
+        }
+    }
+}
+
+/// Add । , ? to `text`. Returns the text unchanged if punctuation fails.
+#[cfg(feature = "punct")]
+#[no_mangle]
+pub unsafe extern "C" fn kothon_punctuate(punct: *const KothonPunct, text: *const c_char) -> *mut c_char {
+    if text.is_null() {
+        return ptr::null_mut();
+    }
+    let text = CStr::from_ptr(text).to_string_lossy().into_owned();
+    if punct.is_null() || text.trim().is_empty() {
+        return to_c(text);
+    }
+    let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (*punct).0.punctuate(&text)));
+    match out {
+        Ok(Ok(t)) => to_c(t),
+        _ => to_c(text),
+    }
+}
+
+#[cfg(feature = "punct")]
+#[no_mangle]
+pub unsafe extern "C" fn kothon_punct_free(punct: *mut KothonPunct) {
+    if !punct.is_null() {
+        drop(Box::from_raw(punct));
+    }
+}

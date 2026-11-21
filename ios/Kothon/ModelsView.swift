@@ -172,7 +172,7 @@ struct ModelsView: View {
                     set: { on in
                         punctuation = on
                         if on && !models.punctuationInstalled {
-                            Task { await models.downloadPunctuation(); dictation.modelChanged() }
+                            Task { await models.downloadPunctuation() }
                         } else {
                             dictation.modelChanged()
                         }

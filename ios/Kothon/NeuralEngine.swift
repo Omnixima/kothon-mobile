@@ -27,7 +27,17 @@ final class NeuralEngineEngine: Transcriber {
     private let lock = NSLock()
     private var running: Task<Void, Never>?
 
-    init(model: SpeechModel, folder: URL) async throws {
+    /// The punctuation model (। , ?), loaded beside WhisperKit; nil if it
+    /// isn't downloaded or fails to load (dictation still works without it).
+    private let punctuator: OpaquePointer?
+
+    init(model: SpeechModel, folder: URL, punctuationDir: URL? = nil) async throws {
+        punctuator = punctuationDir.flatMap { dir in
+            var err: UnsafeMutablePointer<CChar>?
+            let p = dir.path.withCString { kothon_punct_new($0, &err) }
+            if let err { kothon_string_free(err) }
+            return p
+        }
         let compute = ModelComputeOptions(
             melCompute: .cpuOnly,
             audioEncoderCompute: .cpuAndNeuralEngine,
@@ -80,9 +90,16 @@ final class NeuralEngineEngine: Transcriber {
         done.wait()
         lock.lock(); running = nil; lock.unlock()
         if task.isCancelled { throw CancellationError() }
-        let raw = try outcome.get().trimmingCharacters(in: .whitespacesAndNewlines)
+        var raw = try outcome.get().trimmingCharacters(in: .whitespacesAndNewlines)
+        if settings.punctuation, let punctuator, !raw.isEmpty,
+           let out = raw.withCString({ kothon_punctuate(punctuator, $0) }) {
+            raw = String(cString: out)
+            kothon_string_free(out)
+        }
         return Self.postProcess(raw, settings: settings)
     }
+
+    deinit { if let punctuator { kothon_punct_free(punctuator) } }
 
     func prepareForBackground() {}
 

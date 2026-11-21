@@ -42,6 +42,13 @@ void kothon_engine_set_cpu(const KothonEngine *engine, int32_t n_threads, bool a
 void kothon_engine_free(KothonEngine *engine);
 void kothon_string_free(char *s);
 
+// The punctuation model alone, for the Core ML (Neural Engine) speech model.
+typedef struct KothonPunct KothonPunct;
+KothonPunct *kothon_punct_new(const char *dir, char **err_out);
+// Adds । , ? ; returns the text unchanged if punctuation fails.
+char *kothon_punctuate(const KothonPunct *punct, const char *text);
+void kothon_punct_free(KothonPunct *punct);
+
 // Speech detection (Silero VAD v6.2, same as the desktop app).
 typedef struct KothonVad KothonVad;
 KothonVad *kothon_vad_new(const char *path, char **err_out);
