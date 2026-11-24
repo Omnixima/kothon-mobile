@@ -2,6 +2,14 @@
 
 > **Beta.** Early prototype. Expect rough edges.
 
+## Download
+
+**iPhone and iPad:** on the App Store.
+
+<a href="https://apps.apple.com/app/id6837325285"><img src="https://tools.applemarketingtools.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" height="48"></a>
+
+**Android:** coming soon to Google Play.
+
 Speak Bengali in any app and Kothon types it, fully on your phone. No audio
 or text ever leaves the device. This is the mobile sibling of the
 [Kothon desktop app](https://github.com/Omnixima/kothon).
