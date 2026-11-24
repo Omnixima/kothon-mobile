@@ -6,7 +6,7 @@
 
 **iPhone and iPad:** on the App Store.
 
-<a href="https://apps.apple.com/app/id6837325285"><img src="https://tools.applemarketingtools.com/api/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store" height="48"></a>
+<a href="https://apps.apple.com/app/id6837325285"><img src="docs/images/app-store-badge.svg" alt="Download on the App Store" height="50"></a>
 
 **Android:** coming soon to Google Play.
 
